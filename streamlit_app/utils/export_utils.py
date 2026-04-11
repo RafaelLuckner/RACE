@@ -7,7 +7,7 @@ from pathlib import Path
 from config import BODY_LANDMARKS
 
 
-def export_landmarks_to_csv(frames_data, video_info, output_path):
+def export_landmarks_to_csv(frames_data, video_info, output_path, exercise=None):
     """
     Exporta dados dos landmarks para CSV
     
@@ -15,6 +15,7 @@ def export_landmarks_to_csv(frames_data, video_info, output_path):
         frames_data: lista com dados de cada frame
         video_info: informações do vídeo
         output_path: caminho do arquivo CSV
+        exercise: nome do exercício para adicionar em todas as linhas
     """
     data = []
     
@@ -28,14 +29,14 @@ def export_landmarks_to_csv(frames_data, video_info, output_path):
             # Verificar se passou pelos filtros
             vis = visibility[idx] if idx < len(visibility) else 0
             pres = presence[idx] if idx < len(presence) else 0
-            min_vis = video_info.get('min_visibility', 0.3)
-            min_pres = video_info.get('min_presence', 0.3)
-            passed_filter = (vis >= min_vis and pres >= min_pres)
+            min_det_conf = video_info.get('min_pose_detection_confidence', 0.2)
+            min_pres_conf = video_info.get('min_pose_presence_confidence', 0.2)
+            passed_filter = (vis >= min_det_conf and pres >= min_pres_conf)
             
             # Obter nome do landmark
             landmark_name = BODY_LANDMARKS.get(idx, f"landmark_{idx}")
             
-            data.append({
+            row = {
                 'frame': frame_data['frame_idx'],
                 'processed_frame': frame_data.get('processed_frame_idx', frame_data['frame_idx']),
                 'timestamp_s': frame_data['timestamp'],
@@ -49,7 +50,10 @@ def export_landmarks_to_csv(frames_data, video_info, output_path):
                 'visibility': vis,
                 'presence': pres,
                 'passed_filter': passed_filter
-            })
+            }
+            if exercise is not None:
+                row['exercise'] = exercise
+            data.append(row)
     
     df = pd.DataFrame(data)
     df = df.sort_values(['frame', 'landmark_idx']).reset_index(drop=True)

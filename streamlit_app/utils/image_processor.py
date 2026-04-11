@@ -6,7 +6,7 @@ from utils.mediapipe_utils import PoseLandmarker, filter_landmarks
 from config import LANDMARK_COLORS
 
 
-def draw_landmarks_on_image(image, landmarks, visibility, presence, min_visibility=0.5, min_presence=0.5):
+def draw_landmarks_on_image(image, landmarks, visibility, presence, min_pose_detection_confidence=0.2, min_pose_presence_confidence=0.2):
     """
     Desenha landmarks na imagem
     
@@ -15,8 +15,8 @@ def draw_landmarks_on_image(image, landmarks, visibility, presence, min_visibili
         landmarks: lista de landmarks
         visibility: lista de visibilidade
         presence: lista de presença
-        min_visibility: visibilidade mínima
-        min_presence: presença mínima
+        min_pose_detection_confidence: confiança mínima de detecção
+        min_pose_presence_confidence: confiança mínima de presença
     """
     output_image = image.copy()
     height, width, _ = image.shape
@@ -33,7 +33,7 @@ def draw_landmarks_on_image(image, landmarks, visibility, presence, min_visibili
     # Desenhar conexões
     filtered_idx = set()
     for i, (lm, vis, pres) in enumerate(zip(landmarks, visibility, presence)):
-        if vis >= min_visibility and pres >= min_presence:
+        if vis >= min_pose_detection_confidence and pres >= min_pose_presence_confidence:
             filtered_idx.add(i)
     
     # Desenhar linhas
@@ -45,7 +45,7 @@ def draw_landmarks_on_image(image, landmarks, visibility, presence, min_visibili
     
     # Desenhar pontos
     for i, (lm, vis, pres) in enumerate(zip(landmarks, visibility, presence)):
-        if vis >= min_visibility and pres >= min_presence:
+        if vis >= min_pose_detection_confidence and pres >= min_pose_presence_confidence:
             x = int(lm['x'] * width)
             y = int(lm['y'] * height)
             cv2.circle(output_image, (x, y), 5, (0, 255, 0), -1)
@@ -54,15 +54,15 @@ def draw_landmarks_on_image(image, landmarks, visibility, presence, min_visibili
     return output_image
 
 
-def process_image(image_path, pose_detector, min_visibility=0.5, min_presence=0.5):
+def process_image(image_path, pose_detector, min_pose_detection_confidence=0.2, min_pose_presence_confidence=0.2):
     """
     Processa uma imagem e detecta pose
     
     Args:
         image_path: caminho da imagem
         pose_detector: instância de PoseLandmarker
-        min_visibility: visibilidade mínima
-        min_presence: presença mínima
+        min_pose_detection_confidence: confiança mínima de detecção
+        min_pose_presence_confidence: confiança mínima de presença
         
     Returns:
         processed_image: imagem com landmarks
@@ -78,11 +78,11 @@ def process_image(image_path, pose_detector, min_visibility=0.5, min_presence=0.
     
     # Desenhar landmarks
     processed_image = draw_landmarks_on_image(
-        image, landmarks, visibility, presence, min_visibility, min_presence
+        image, landmarks, visibility, presence, min_pose_detection_confidence, min_pose_presence_confidence
     )
     
     # Preparar dados dos landmarks
-    filtered = filter_landmarks(landmarks, visibility, presence, min_visibility, min_presence)
+    filtered = filter_landmarks(landmarks, visibility, presence, min_pose_detection_confidence, min_pose_presence_confidence)
     
     landmarks_data = {
         'total_landmarks': len(landmarks),

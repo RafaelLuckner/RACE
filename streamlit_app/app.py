@@ -14,13 +14,13 @@ import time
 
 from utils.mediapipe_utils import PoseLandmarker, filter_landmarks
 from utils.image_processor import process_image, resize_image
-from utils.video_processor import process_video, get_frame_from_video
+from utils.video_processor import process_video, get_frame_from_video, get_frames_by_indices, create_output_video
 from utils.export_utils import (
     export_landmarks_to_csv, 
     export_landmarks_to_json,
     create_landmarks_table
 )
-from config import DEFAULT_CONFIDENCE, DEFAULT_VISIBILITY, DEFAULT_PRESENCE, DEFAULT_FPS
+from config import DEFAULT_CONFIDENCE, DEFAULT_POSE_DETECTION_CONFIDENCE, DEFAULT_POSE_PRESENCE_CONFIDENCE, DEFAULT_FPS
 
 
 # Configurar página Streamlit
@@ -52,7 +52,7 @@ def init_session_state():
     if 'video_detector' not in st.session_state:
         st.session_state.video_detector = None
     if 'model_type' not in st.session_state:
-        st.session_state.model_type = 'lite'
+        st.session_state.model_type = 'heavy'
     if 'video_frames_data' not in st.session_state:
         st.session_state.video_frames_data = None
     if 'video_info' not in st.session_state:
@@ -76,17 +76,28 @@ def init_session_state():
     if 'processed_frame_counter' not in st.session_state:
         st.session_state.processed_frame_counter = 0
     if 'current_model_type' not in st.session_state:
-        st.session_state.current_model_type = 'lite'
-    if 'current_min_visibility' not in st.session_state:
-        st.session_state.current_min_visibility = DEFAULT_VISIBILITY
-    if 'current_min_presence' not in st.session_state:
-        st.session_state.current_min_presence = DEFAULT_PRESENCE
+        st.session_state.current_model_type = 'heavy'
+    if 'current_pose_detection_confidence' not in st.session_state:
+        st.session_state.current_pose_detection_confidence = DEFAULT_POSE_DETECTION_CONFIDENCE
+    if 'current_pose_presence_confidence' not in st.session_state:
+        st.session_state.current_pose_presence_confidence = DEFAULT_POSE_PRESENCE_CONFIDENCE
+    if 'exercise_label' not in st.session_state:
+        st.session_state.exercise_label = 'descanso'
+    if 'cached_video_id' not in st.session_state:
+        st.session_state.cached_video_id = None
+    if 'cached_video_temp_path' not in st.session_state:
+        st.session_state.cached_video_temp_path = None
 
 
 def load_pose_detector(model_type='lite', video_mode=False):
     """Carrega o detector de pose"""
     try:
-        detector = PoseLandmarker(model_path=model_type, min_confidence=DEFAULT_CONFIDENCE, video_mode=video_mode)
+        detector = PoseLandmarker(
+            model_path=model_type,
+            min_confidence=DEFAULT_CONFIDENCE,
+            video_mode=video_mode,
+            num_poses=1,
+        )
         return detector
     except Exception as e:
         st.error(f"Erro ao carregar modelo: {str(e)}")
@@ -111,6 +122,7 @@ def main():
         model_type = st.radio(
             "Selecione o modelo:",
             options=['lite', 'full', 'heavy'],
+            index=2,
             help="lite: mais rápido, full: intermediário, heavy: mais preciso"
         )
         
@@ -139,33 +151,41 @@ def main():
         # Hiperparâmetros
         st.subheader("Hiperparâmetros MediaPipe")
         
-        min_visibility = st.slider(
-            "Visibilidade Mínima",
+        min_pose_detection_confidence = st.slider(
+            "Confiança de Detecção de Pose",
             min_value=0.0,
             max_value=1.0,
-            value=DEFAULT_VISIBILITY,
+            value=DEFAULT_POSE_DETECTION_CONFIDENCE,
             step=0.05,
-            help="Confiança mínima de visibilidade do landmark"
+            help="Confiança mínima para detectar pose"
         )
         
-        min_presence = st.slider(
-            "Presença Mínima",
+        min_pose_presence_confidence = st.slider(
+            "Confiança de Presença de Pose",
             min_value=0.0,
             max_value=1.0,
-            value=DEFAULT_PRESENCE,
+            value=DEFAULT_POSE_PRESENCE_CONFIDENCE,
             step=0.05,
-            help="Confiança mínima de presença do landmark"
+            help="Confiança mínima de presença da pose"
+        )
+
+        inference_scale = st.select_slider(
+            "Escala de Processamento (velocidade)",
+            options=[0.5, 0.75, 1.0],
+            value=0.75,
+            format_func=lambda x: f"{int(x * 100)}%",
+            help="Reduz apenas a resolução da inferência para acelerar. A exportação mantém resolução original.",
         )
         
         # Detectar mudanças nos parâmetros
         params_changed = False
         if (model_type != st.session_state.current_model_type or 
-            min_visibility != st.session_state.current_min_visibility or 
-            min_presence != st.session_state.current_min_presence):
+            min_pose_detection_confidence != st.session_state.current_pose_detection_confidence or 
+            min_pose_presence_confidence != st.session_state.current_pose_presence_confidence):
             params_changed = True
             st.session_state.current_model_type = model_type
-            st.session_state.current_min_visibility = min_visibility
-            st.session_state.current_min_presence = min_presence
+            st.session_state.current_pose_detection_confidence = min_pose_detection_confidence
+            st.session_state.current_pose_presence_confidence = min_pose_presence_confidence
             
             # Limpar dados processados
             st.session_state.video_frames_data = {}
@@ -223,8 +243,8 @@ def main():
                             processed_img, landmarks_data = process_image(
                                 temp_path,
                                 st.session_state.pose_detector,
-                                min_visibility=min_visibility,
-                                min_presence=min_presence
+                                min_pose_detection_confidence=min_pose_detection_confidence,
+                                min_pose_presence_confidence=min_pose_presence_confidence
                             )
                         
                         # Limpar arquivo temporário
@@ -314,7 +334,9 @@ def main():
             uploaded_video_frames = st.file_uploader(
                 "Selecione um vídeo",
                 type=['mp4', 'avi', 'mov', 'mkv'],
-                key='video_uploader_frames'
+                key='video_uploader_frames',
+                max_upload_size = 1000
+
             )
             
             if uploaded_video_frames:
@@ -353,13 +375,13 @@ def main():
                         # Processar com IMAGE mode
                         with st.spinner("Processando frame..."):
                             landmarks, visibility, presence = st.session_state.pose_detector.detect_pose(frame)
-                            filtered = filter_landmarks(landmarks, visibility, presence, min_visibility, min_presence)
+                            filtered = filter_landmarks(landmarks, visibility, presence, min_pose_detection_confidence, min_pose_presence_confidence)
                         
                         # Desenhar e exibir
                         from utils.image_processor import draw_landmarks_on_image
                         processed_frame = draw_landmarks_on_image(
                             frame, landmarks, visibility, presence,
-                            min_visibility, min_presence
+                            min_pose_detection_confidence, min_pose_presence_confidence
                         )
                         
                         display_frame = resize_image(processed_frame)
@@ -414,12 +436,21 @@ def main():
         if uploaded_video:
             # Identificar vídeo único
             video_id = f"{uploaded_video.name}_{uploaded_video.size}"
-            params_key = f"{video_id}_{model_type}_{min_visibility}_{min_presence}"
-            
-            # Salvar vídeo temporário
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-                tmp_file.write(uploaded_video.getbuffer())
-                temp_video_path = tmp_file.name
+
+            # Reaproveitar arquivo temporário entre reruns para evitar custo de escrita repetida.
+            cached_path = st.session_state.cached_video_temp_path
+            if st.session_state.cached_video_id != video_id or not cached_path or not os.path.exists(cached_path):
+                if cached_path and os.path.exists(cached_path):
+                    try:
+                        os.unlink(cached_path)
+                    except Exception:
+                        pass
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                    tmp_file.write(uploaded_video.getbuffer())
+                    st.session_state.cached_video_temp_path = tmp_file.name
+                    st.session_state.cached_video_id = video_id
+
+            temp_video_path = st.session_state.cached_video_temp_path
             
             try:
                 # Obter informações do vídeo
@@ -468,6 +499,8 @@ def main():
                     st.metric("Frames a Processar", expected_processed_frames)
                 with info_col3:
                     st.metric("Tempo de Processamento Est.", f"~{(expected_processed_frames * 0.1):.1f}s" if expected_processed_frames > 0 else "N/A")
+
+                params_key = f"{video_id}_{model_type}_{min_pose_detection_confidence}_{min_pose_presence_confidence}_{fps_process}_{inference_scale}"
                 
                 st.divider()
                 
@@ -488,88 +521,49 @@ def main():
                 video_data_cached = st.session_state[params_key]
                 
                 if video_data_cached is None:
-                    # Garantir que o detector VIDEO mode foi recriado para este vídeo
-                    if st.session_state.video_detector is None:
-                        st.session_state.video_detector = load_pose_detector(model_type, video_mode=True)
+                    # SEMPRE recriar o detector para limpar estado anterior dos timestamps
+                    # Isso evita erros de "timestamp not monotonically increasing"
+                    st.session_state.video_detector = load_pose_detector(model_type, video_mode=True)
                     
                     # Processar vídeo
                     st.info(f"🔄 Processando vídeo com VIDEO mode (rastreamento contínuo) a {fps_process} FPS...")
                     
                     progress_bar = st.progress(0)
                     status_text = st.empty()
-                    
-                    all_frames_data = {}
-                    frame_count = 0
-                    frame_idx = 0
-                    processed_frame_idx = 0
-                    
-                    cap = cv2.VideoCapture(temp_video_path)
-                    
-                    try:
-                        while cap.isOpened():
-                            ret, frame = cap.read()
-                            if not ret:
-                                break
-                            
-                            # Verificar se deve processar este frame
-                            if frame_idx % frame_interval == 0:
-                                # Calcular timestamp em ms baseado no frame_idx REAL do vídeo
-                                # Isso garante que timestamps sejam monotonicamente crescentes mesmo pulando frames
-                                timestamp_ms = int(frame_idx / original_fps * 1000)
-                                
-                                # Processar com VIDEO mode
-                                start_time = time.time()
-                                try:
-                                    landmarks, visibility, presence = st.session_state.video_detector.detect_for_video(frame, timestamp_ms)
-                                    processing_time = time.time() - start_time
-                                    
-                                    # Filtrar landmarks
-                                    filtered = filter_landmarks(landmarks, visibility, presence, min_visibility, min_presence)
-                                    
-                                    frame_data = {
-                                        'frame_idx': frame_idx,
-                                        'processed_frame_idx': processed_frame_idx,
-                                        'timestamp': frame_idx / original_fps,
-                                        'model': model_type,
-                                        'processing_time': processing_time,
-                                        'landmarks': landmarks,
-                                        'visibility': visibility,
-                                        'presence': presence,
-                                        'filtered_landmarks': filtered
-                                    }
-                                    
-                                    all_frames_data[frame_idx] = frame_data
-                                    frame_count += 1
-                                    processed_frame_idx += 1
-                                except Exception as inner_error:
-                                    st.warning(f"⚠️ Erro ao processar frame {frame_idx}: {str(inner_error)}")
-                            
-                            frame_idx += 1
-                            
-                            # Atualizar progresso
-                            if frame_idx % max(1, total_frames // 100) == 0:
-                                percentage = (frame_idx / total_frames) * 100
-                                progress_bar.progress(min(frame_idx / total_frames, 1.0))
-                                status_text.text(f"Analisado: {frame_idx}/{total_frames} frames ({percentage:.1f}%) | Processados: {frame_count}")
-                    
-                    finally:
-                        cap.release()
-                    
+
+                    def _progress(current, total):
+                        ratio = min(current / max(total, 1), 1.0)
+                        progress_bar.progress(ratio)
+                        status_text.text(f"Processados: {current}/{max(total, 1)} frames")
+
+                    start_process = time.time()
+                    frames_list, processed_video_info = process_video(
+                        temp_video_path,
+                        st.session_state.video_detector,
+                        fps_process=fps_process,
+                        min_pose_detection_confidence=min_pose_detection_confidence,
+                        min_pose_presence_confidence=min_pose_presence_confidence,
+                        inference_scale=inference_scale,
+                        progress_callback=_progress,
+                    )
+                    elapsed = time.time() - start_process
                     progress_bar.progress(1.0)
-                    status_text.text(f"✅ Vídeo processado! {frame_count} frames analisados a {fps_process} FPS")
+                    status_text.text(f"✅ Vídeo processado! {len(frames_list)} frames em {elapsed:.1f}s")
                     
                     # Cachear resultados
                     st.session_state[params_key] = {
-                        'frames_data': all_frames_data,
+                        'frames_data': frames_list,
                         'video_info': {
-                            'total_frames': total_frames,
-                            'original_fps': original_fps,
+                            'total_frames': processed_video_info['total_frames'],
+                            'original_fps': processed_video_info['original_fps'],
                             'fps_process': fps_process,
                             'width': width,
                             'height': height,
+                            'interval': processed_video_info['interval'],
+                            'inference_scale': inference_scale,
                             'model': model_type,
-                            'min_visibility': min_visibility,
-                            'min_presence': min_presence
+                            'min_pose_detection_confidence': min_pose_detection_confidence,
+                            'min_pose_presence_confidence': min_pose_presence_confidence
                         }
                     }
                     
@@ -581,16 +575,17 @@ def main():
                 if video_data_cached:
                     frames_data = video_data_cached['frames_data']
                     video_info = video_data_cached['video_info']
+                    frames_data_map = {f['frame_idx']: f for f in frames_data}
                     
                     st.divider()
                     st.subheader("📊 Resultados")
                     
                     # Estatísticas gerais
                     total_landmarks_detected = sum(
-                        len(f['filtered_landmarks']) for f in frames_data.values()
+                        len(f['filtered_landmarks']) for f in frames_data
                     )
                     avg_processing_time = sum(
-                        f['processing_time'] for f in frames_data.values()
+                        f.get('processing_time', 0.0) for f in frames_data
                     ) / len(frames_data) if frames_data else 0
                     
                     stat_col1, stat_col2, stat_col3 = st.columns(3)
@@ -609,21 +604,22 @@ def main():
                     num_preview = min(4, len(frames_data))
                     if num_preview > 0:
                         preview_indices = np.linspace(0, total_frames - 1, num_preview, dtype=int)
+                        preview_frames = get_frames_by_indices(temp_video_path, preview_indices)
                         preview_cols = st.columns(num_preview)
                         
                         for col_idx, frame_num in enumerate(preview_indices):
                             with preview_cols[col_idx]:
-                                frame = get_frame_from_video(temp_video_path, int(frame_num))
-                                if frame is not None and int(frame_num) in frames_data:
-                                    frame_data = frames_data[int(frame_num)]
+                                frame = preview_frames.get(int(frame_num))
+                                if frame is not None and int(frame_num) in frames_data_map:
+                                    frame_data = frames_data_map[int(frame_num)]
                                     from utils.image_processor import draw_landmarks_on_image
                                     processed = draw_landmarks_on_image(
                                         frame,
                                         frame_data['landmarks'],
                                         frame_data['visibility'],
                                         frame_data['presence'],
-                                        min_visibility,
-                                        min_presence
+                                        min_pose_detection_confidence,
+                                        min_pose_presence_confidence
                                     )
                                     display = resize_image(processed, max_width=250, max_height=250)
                                     st.image(display, channels="BGR", use_container_width=True)
@@ -633,14 +629,21 @@ def main():
                     
                     # Exportação
                     st.subheader("💾 Exportar Dados")
+
+                    exercise_label = st.selectbox(
+                        "Exercício para adicionar no CSV",
+                        options=["flexao", "agachamento", "rosca_biceps", "descanso"],
+                        index=["flexao", "agachamento", "rosca_biceps", "descanso"].index(st.session_state.exercise_label),
+                        key="exercise_label_select",
+                    )
+                    st.session_state.exercise_label = exercise_label
                     
                     col_csv, col_json, col_video = st.columns(3)
                     
                     with col_csv:
                         if st.button("📊 Exportar CSV", key='btn_export_csv_full'):
                             csv_path = f"pose_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                            frames_list = [frames_data[idx] for idx in sorted(frames_data.keys())]
-                            export_landmarks_to_csv(frames_list, video_info, csv_path)
+                            export_landmarks_to_csv(frames_data, video_info, csv_path, exercise=exercise_label)
                             
                             with open(csv_path, 'rb') as f:
                                 st.download_button(
@@ -655,8 +658,7 @@ def main():
                     with col_json:
                         if st.button("📋 Exportar JSON", key='btn_export_json_full'):
                             json_path = f"pose_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                            frames_list = [frames_data[idx] for idx in sorted(frames_data.keys())]
-                            export_landmarks_to_json(frames_list, video_info, json_path)
+                            export_landmarks_to_json(frames_data, video_info, json_path)
                             
                             with open(json_path, 'rb') as f:
                                 st.download_button(
@@ -670,44 +672,29 @@ def main():
                     
                     with col_video:
                         if st.button("🎬 Exportar Vídeo", key='btn_export_video_full'):
-                            st.info("⏳ Gerando vídeo com landmarks (apenas frames processados)...")
+                            st.info("⏳ Gerando vídeo com landmarks...")
                             
                             output_video_path = f"pose_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
-                            
-                            cap = cv2.VideoCapture(temp_video_path)
-                            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                            # Usar fps_process ao invés de original_fps para os frames processados
-                            out = cv2.VideoWriter(output_video_path, fourcc, fps_process, (width, height))
-                            
-                            processed_frame_list = sorted(frames_data.keys())
+
                             progress_bar = st.progress(0)
                             status_text = st.empty()
-                            
-                            for idx, frame_num in enumerate(processed_frame_list):
-                                # Obter frame do vídeo original
-                                frame = get_frame_from_video(temp_video_path, int(frame_num))
-                                
-                                if frame is not None and frame_num in frames_data:
-                                    fd = frames_data[frame_num]
-                                    from utils.image_processor import draw_landmarks_on_image
-                                    frame = draw_landmarks_on_image(
-                                        frame,
-                                        fd['landmarks'],
-                                        fd['visibility'],
-                                        fd['presence'],
-                                        min_visibility,
-                                        min_presence
-                                    )
-                                
-                                out.write(frame)
-                                
-                                p = ((idx + 1) / len(processed_frame_list))
-                                progress_bar.progress(min(p, 1.0))
-                                status_text.text(f"Gerando: {idx + 1}/{len(processed_frame_list)} frames processados")
-                            
-                            cap.release()
-                            out.release()
-                            status_text.text(f"✅ Vídeo gerado com {len(processed_frame_list)} frames a {fps_process} FPS!")
+
+                            def _export_progress(current, total):
+                                ratio = min(current / max(total, 1), 1.0)
+                                progress_bar.progress(ratio)
+                                status_text.text(f"Gerando: {current}/{max(total, 1)} frames")
+
+                            create_output_video(
+                                temp_video_path,
+                                frames_data,
+                                video_info,
+                                output_video_path,
+                                st.session_state.video_detector,
+                                min_pose_detection_confidence=min_pose_detection_confidence,
+                                min_pose_presence_confidence=min_pose_presence_confidence,
+                                progress_callback=_export_progress,
+                            )
+                            status_text.text(f"✅ Vídeo gerado com {len(frames_data)} frames processados a {fps_process} FPS!")
                             
                             with open(output_video_path, 'rb') as f:
                                 st.download_button(
@@ -724,17 +711,7 @@ def main():
                 import traceback
                 st.error(traceback.format_exc())
             finally:
-                # Limpar arquivo temporário com retry
-                if os.path.exists(temp_video_path):
-                    try:
-                        os.unlink(temp_video_path)
-                    except PermissionError:
-                        # Se não conseguir deletar imediatamente, tenta em alguns ms
-                        time.sleep(0.5)
-                        try:
-                            os.unlink(temp_video_path)
-                        except Exception as e:
-                            st.warning(f"⚠️ Não foi possível limpar arquivo temporário: {e}")
+                pass
 
 
 if __name__ == "__main__":
