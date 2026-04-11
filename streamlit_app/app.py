@@ -8,6 +8,10 @@ os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 os.environ['DISPLAY'] = ''
+os.environ['LIBGL_ALWAYS_INDIRECT'] = '1'
+os.environ['MESA_GL_VERSION_OVERRIDE'] = '4.1'
+os.environ['LIBVA_DRIVER_NAME'] = 'swrast'
+os.environ['COGL_DRIVER'] = 'gl'
 
 import streamlit as st
 import cv2
