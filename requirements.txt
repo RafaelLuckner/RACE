@@ -1,7 +1,0 @@
-matplotlib==3.10.8
-mediapipe==0.10.33
-nbformat==5.10.4
-numpy==2.4.3
-pandas==2.3.3
-plotly==6.6.0
-streamlit==1.55.0
