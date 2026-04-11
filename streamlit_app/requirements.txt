@@ -1,11 +1,9 @@
 streamlit==1.55.0
 mediapipe==0.10.33
-opencv-contrib-python==4.13.0.92
+opencv-python-headless==4.13.0.92
 pandas==2.3.3
 numpy==2.4.3
 pillow==12.1.1
 plotly==6.6.0
 pyarrow==23.0.1
 python-dateutil==2.9.0.post0
-matplotlib==3.10.8
-nbformat==5.10.4
