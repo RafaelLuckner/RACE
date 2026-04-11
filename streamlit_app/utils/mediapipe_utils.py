@@ -9,7 +9,7 @@ from pathlib import Path
 class PoseLandmarker:
     """Classe para detecção de pose com MediaPipe"""
 
-    def __init__(self, model_path="lite", min_confidence=0.5, video_mode=False):
+    def __init__(self, model_path="lite", min_confidence=0.5, video_mode=False, num_poses=1):
         """
         Inicializa o MediaPipe Pose Landmarker
         
@@ -17,10 +17,12 @@ class PoseLandmarker:
             model_path: "lite", "heavy" ou "full"
             min_confidence: Confiança mínima para detecção
             video_mode: Se True, usa RunningMode.VIDEO para melhor rastreamento
+            num_poses: quantidade máxima de poses detectadas por frame
         """
         self.min_confidence = min_confidence
         self.model_path = model_path
         self.video_mode = video_mode
+        self.num_poses = num_poses
         self.frame_count = 0
         
         # Encontrar o caminho correto do modelo
@@ -47,9 +49,9 @@ class PoseLandmarker:
         options = mp.tasks.vision.PoseLandmarkerOptions(
             base_options=mp.tasks.BaseOptions(model_asset_path=model_file),
             running_mode=running_mode,
-            num_poses=1,
-            min_pose_detection_confidence=0.2,  # Reduzido de 0.5
-            min_pose_presence_confidence=0.2    # Reduzido de 0.5
+            num_poses=self.num_poses,
+            min_pose_detection_confidence=self.min_confidence,
+            min_pose_presence_confidence=self.min_confidence,
         )
         
         self.landmarker = mp.tasks.vision.PoseLandmarker.create_from_options(options)
@@ -141,16 +143,16 @@ def get_landmark_info(landmark_idx):
     return BODY_LANDMARKS.get(landmark_idx, f"Unknown ({landmark_idx})")
 
 
-def is_landmark_visible(visibility, presence, min_visibility=0.5, min_presence=0.5):
+def is_landmark_visible(visibility, presence, min_pose_detection_confidence=0.2, min_pose_presence_confidence=0.2):
     """Verifica se um landmark está visível com base nos limites"""
-    return visibility >= min_visibility and presence >= min_presence
+    return visibility >= min_pose_detection_confidence and presence >= min_pose_presence_confidence
 
 
-def filter_landmarks(landmarks, visibility, presence, min_visibility=0.5, min_presence=0.5):
-    """Filtra landmarks com base em visibilidade e presença"""
+def filter_landmarks(landmarks, visibility, presence, min_pose_detection_confidence=0.2, min_pose_presence_confidence=0.2):
+    """Filtra landmarks com base em confiança de detecção e presença"""
     filtered = []
     for i, (lm, vis, pres) in enumerate(zip(landmarks, visibility, presence)):
-        if is_landmark_visible(vis, pres, min_visibility, min_presence):
+        if is_landmark_visible(vis, pres, min_pose_detection_confidence, min_pose_presence_confidence):
             filtered.append({
                 'index': i,
                 'landmark': lm,

@@ -1,8 +1,10 @@
 videos_output/
 gym_videos/
-models/*
 Documentos
 download*
+images/
+*.mp4
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

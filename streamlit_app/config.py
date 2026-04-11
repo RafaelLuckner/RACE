@@ -6,8 +6,8 @@ MODEL_PATH_LITE = "../models/pose_landmarker_lite.task"
 
 # Configurações padrão
 DEFAULT_CONFIDENCE = 0.2
-DEFAULT_VISIBILITY = 0.3
-DEFAULT_PRESENCE = 0.3
+DEFAULT_POSE_DETECTION_CONFIDENCE = 0.2
+DEFAULT_POSE_PRESENCE_CONFIDENCE = 0.2
 DEFAULT_FPS = 15
 
 # Cores para visualização

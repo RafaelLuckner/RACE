@@ -1,13 +1,20 @@
 """Processamento de vídeos com pose detection"""
 
 import cv2
-import numpy as np
-from utils.mediapipe_utils import PoseLandmarker, filter_landmarks
+import time
+from utils.mediapipe_utils import filter_landmarks
 from utils.image_processor import draw_landmarks_on_image
 
 
-def process_video(video_path, pose_detector, fps_process=15, min_visibility=0.5, 
-                  min_presence=0.5, progress_callback=None):
+def process_video(
+    video_path,
+    pose_detector,
+    fps_process=15,
+    min_pose_detection_confidence=0.2,
+    min_pose_presence_confidence=0.2,
+    inference_scale=1.0,
+    progress_callback=None,
+):
     """
     Processa vídeo e detecta pose em cada frame
     
@@ -15,8 +22,9 @@ def process_video(video_path, pose_detector, fps_process=15, min_visibility=0.5,
         video_path: caminho do vídeo
         pose_detector: instância de PoseLandmarker
         fps_process: frames por segundo a processar
-        min_visibility: visibilidade mínima
-        min_presence: presença mínima
+        min_pose_detection_confidence: confiança mínima de detecção
+        min_pose_presence_confidence: confiança mínima de presença
+        inference_scale: escala do frame para inferência (0.3-1.0)
         progress_callback: função para callback de progresso
         
     Returns:
@@ -54,40 +62,79 @@ def process_video(video_path, pose_detector, fps_process=15, min_visibility=0.5,
         ret, frame = cap.read()
         if not ret:
             break
-        
-        # Processar a cada intervalo de frames
-        if frame_idx % interval == 0:
-            landmarks, visibility, presence = pose_detector.detect_pose(frame)
-            
-            filtered = filter_landmarks(landmarks, visibility, presence, min_visibility, min_presence)
-            
-            frame_data = {
-                'frame_idx': frame_idx,
-                'processed_frame_idx': processed_frame_idx,
-                'total_landmarks': len(landmarks),
-                'detected_landmarks': len(filtered),
-                'landmarks': landmarks,
-                'visibility': visibility,
-                'presence': presence,
-                'filtered_landmarks': filtered,
-                'timestamp': frame_idx / original_fps
-            }
-            
-            frames_data.append(frame_data)
-            processed_frame_idx += 1
-            
-            if progress_callback:
-                progress_callback(len(frames_data), total_frames // interval)
-        
-        frame_idx += 1
+
+        timestamp_ms = int((frame_idx / max(original_fps, 1)) * 1000)
+        frame_for_inference = frame
+        if inference_scale < 0.999:
+            frame_for_inference = cv2.resize(
+                frame,
+                None,
+                fx=inference_scale,
+                fy=inference_scale,
+                interpolation=cv2.INTER_AREA,
+            )
+
+        start_time = time.time()
+        if getattr(pose_detector, "video_mode", False):
+            landmarks, visibility, presence = pose_detector.detect_for_video(frame_for_inference, timestamp_ms)
+        else:
+            landmarks, visibility, presence = pose_detector.detect_pose(frame_for_inference)
+        processing_time = time.time() - start_time
+
+        filtered = filter_landmarks(
+            landmarks,
+            visibility,
+            presence,
+            min_pose_detection_confidence,
+            min_pose_presence_confidence,
+        )
+
+        frame_data = {
+            'frame_idx': frame_idx,
+            'processed_frame_idx': processed_frame_idx,
+            'total_landmarks': len(landmarks),
+            'detected_landmarks': len(filtered),
+            'landmarks': landmarks,
+            'visibility': visibility,
+            'presence': presence,
+            'processing_time': processing_time,
+            'filtered_landmarks': filtered,
+            'timestamp': frame_idx / max(original_fps, 1),
+        }
+
+        frames_data.append(frame_data)
+        processed_frame_idx += 1
+
+        if progress_callback:
+            progress_callback(processed_frame_idx, max(total_frames // interval, 1))
+
+        # Pula frames intermediários sem decodificar imagem completa para ganhar desempenho.
+        skipped = 0
+        while skipped < interval - 1:
+            grabbed = cap.grab()
+            if not grabbed:
+                break
+            skipped += 1
+
+        frame_idx += (skipped + 1)
+
+        if skipped < interval - 1:
+            break
     
     cap.release()
     return frames_data, video_info
 
 
-def create_output_video(video_path, frames_data, video_info, output_path, 
-                       pose_detector, min_visibility=0.5, min_presence=0.5,
-                       progress_callback=None):
+def create_output_video(
+    video_path,
+    frames_data,
+    video_info,
+    output_path,
+    pose_detector,
+    min_pose_detection_confidence=0.2,
+    min_pose_presence_confidence=0.2,
+    progress_callback=None,
+):
     """
     Cria vídeo de saída com landmarks desenhados
     
@@ -97,8 +144,8 @@ def create_output_video(video_path, frames_data, video_info, output_path,
         video_info: informações do vídeo
         output_path: caminho do vídeo de saída
         pose_detector: instância de PoseLandmarker (para reprocessar frames)
-        min_visibility: visibilidade mínima
-        min_presence: presença mínima
+        min_pose_detection_confidence: confiança mínima de detecção
+        min_pose_presence_confidence: confiança mínima de presença
         progress_callback: função para callback de progresso
     """
     cap = cv2.VideoCapture(video_path)
@@ -129,8 +176,8 @@ def create_output_video(video_path, frames_data, video_info, output_path,
                 data['landmarks'],
                 data['visibility'],
                 data['presence'],
-                min_visibility,
-                min_presence
+                min_pose_detection_confidence,
+                min_pose_presence_confidence,
             )
             data_idx += 1
         
@@ -155,3 +202,27 @@ def get_frame_from_video(video_path, frame_idx):
     if ret:
         return frame
     return None
+
+
+def get_frames_by_indices(video_path, frame_indices):
+    """Retorna múltiplos frames abrindo o vídeo apenas uma vez."""
+    if len(frame_indices) == 0:
+        return {}
+
+    indices = sorted(set(int(i) for i in frame_indices))
+    cap = cv2.VideoCapture(video_path)
+    frames = {}
+
+    if not cap.isOpened():
+        return frames
+
+    try:
+        for idx in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                frames[idx] = frame
+    finally:
+        cap.release()
+
+    return frames
