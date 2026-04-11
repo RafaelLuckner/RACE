@@ -31,29 +31,35 @@ class PoseLandmarker:
         self.num_poses = num_poses
         self.frame_count = 0
         
+        # Obter o caminho absoluto da pasta raiz do projeto
+        # mediapipe_utils.py está em: streamlit_app/utils/mediapipe_utils.py
+        # Logo: parent.parent.parent = raiz do projeto
+        script_dir = Path(__file__).resolve()  # Caminho absoluto do arquivo
+        project_root = script_dir.parent.parent.parent  # Sobe 3 níveis até a raiz
+        models_dir = project_root / "models"
+        
         # Encontrar o caminho correto do modelo
         if model_path == "heavy":
-            model_file = "../models/pose_landmarker_heavy.task"
+            model_file = models_dir / "pose_landmarker_heavy.task"
         elif model_path == "full":
-            model_file = "../models/pose_landmarker_full.task"
+            model_file = models_dir / "pose_landmarker_full.task"
         else:
-            model_file = "../models/pose_landmarker_lite.task"
+            model_file = models_dir / "pose_landmarker_lite.task"
         
-        # Verificar se arquivo existe, se não tenta caminhos alternativos
-        if not os.path.exists(model_file):
-            base_dir = Path(__file__).parent.parent.parent
-            for model_name in ["pose_landmarker_heavy.task", "pose_landmarker_lite.task"]:
-                alt_path = base_dir / "models" / model_name
-                if alt_path.exists():
-                    model_file = str(alt_path)
-                    break
+        # Verificar se arquivo existe
+        if not model_file.exists():
+            raise FileNotFoundError(
+                f"Modelo não encontrado: {model_file}\n"
+                f"Procurado em: {models_dir}\n"
+                f"Arquivos disponíveis: {list(models_dir.glob('*.task')) if models_dir.exists() else 'Diretório não existe'}"
+            )
         
         # Definir modo de execução
         running_mode = mp.tasks.vision.RunningMode.VIDEO if video_mode else mp.tasks.vision.RunningMode.IMAGE
         
         # Criar opções do detector
         options = mp.tasks.vision.PoseLandmarkerOptions(
-            base_options=mp.tasks.BaseOptions(model_asset_path=model_file),
+            base_options=mp.tasks.BaseOptions(model_asset_path=str(model_file)),
             running_mode=running_mode,
             num_poses=self.num_poses,
             min_pose_detection_confidence=self.min_confidence,
