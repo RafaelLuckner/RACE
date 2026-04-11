@@ -2,12 +2,18 @@
 Aplicativo Streamlit para Análise de Pose com MediaPipe
 """
 
+import os
+# Desabilitar GPU e renderização gráfica para compatibilidade com Streamlit Cloud
+os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['DISPLAY'] = ''
+
 import streamlit as st
 import cv2
 import numpy as np
 import pandas as pd
 from pathlib import Path
-import os
 import tempfile
 from datetime import datetime
 import time

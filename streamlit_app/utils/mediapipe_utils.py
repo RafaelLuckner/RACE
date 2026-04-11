@@ -1,8 +1,14 @@
 """Utilitários para MediaPipe Pose"""
 
+import os
+# Desabilitar GPU e renderização gráfica para compatibilidade com Streamlit Cloud
+os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+os.environ['DISPLAY'] = ''
+
 import mediapipe as mp
 import numpy as np
-import os
 from pathlib import Path
 
 
