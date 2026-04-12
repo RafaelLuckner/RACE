@@ -62,7 +62,7 @@ def init_session_state():
     if 'video_detector' not in st.session_state:
         st.session_state.video_detector = None
     if 'model_type' not in st.session_state:
-        st.session_state.model_type = 'heavy'
+        st.session_state.model_type = 'full'
     if 'video_frames_data' not in st.session_state:
         st.session_state.video_frames_data = None
     if 'video_info' not in st.session_state:
@@ -86,7 +86,7 @@ def init_session_state():
     if 'processed_frame_counter' not in st.session_state:
         st.session_state.processed_frame_counter = 0
     if 'current_model_type' not in st.session_state:
-        st.session_state.current_model_type = 'heavy'
+        st.session_state.current_model_type = 'full'
     if 'current_pose_detection_confidence' not in st.session_state:
         st.session_state.current_pose_detection_confidence = DEFAULT_POSE_DETECTION_CONFIDENCE
     if 'current_pose_presence_confidence' not in st.session_state:
@@ -132,7 +132,7 @@ def main():
         model_type = st.radio(
             "Selecione o modelo:",
             options=['lite', 'full', 'heavy'],
-            index=2,
+            index=1,
             help="lite: mais rápido, full: intermediário, heavy: mais preciso"
         )
         
@@ -167,7 +167,10 @@ def main():
             max_value=1.0,
             value=DEFAULT_POSE_DETECTION_CONFIDENCE,
             step=0.05,
-            help="Confiança mínima para detectar pose"
+            help="""Limiar mínimo de confiança para detectar uma pose.
+                    \nValores baixos (0.2) detectam mais poses (falsos positivos).
+                    \nValores altos (0.9) detectam apenas poses com alta confiança.
+                    \nPadrão: 0.5"""
         )
         
         min_pose_presence_confidence = st.slider(
@@ -176,15 +179,10 @@ def main():
             max_value=1.0,
             value=DEFAULT_POSE_PRESENCE_CONFIDENCE,
             step=0.05,
-            help="Confiança mínima de presença da pose"
-        )
-
-        inference_scale = st.select_slider(
-            "Escala de Processamento (velocidade)",
-            options=[0.5, 0.75, 1.0],
-            value=0.75,
-            format_func=lambda x: f"{int(x * 100)}%",
-            help="Reduz apenas a resolução da inferência para acelerar. A exportação mantém resolução original.",
+            help="""Limiar mínimo de confiança para cada landmark estar visível.
+                    \nValores baixos (0.2) aceitam landmarks menos visíveis.
+                    \nValores altos (0.9) apenas landmarks muito visíveis.
+                    \nPadrão: 0.5"""
         )
         
         # Detectar mudanças nos parâmetros
@@ -493,7 +491,7 @@ def main():
                     "Frames Por Segundo (FPS) para Processar",
                     min_value=1,
                     max_value=int(original_fps) if original_fps > 0 else 30,
-                    value=min(15, int(original_fps) if original_fps > 0 else 30),
+                    value=min(5, int(original_fps) if original_fps > 0 else 5),
                     step=1,
                     help="Quantos frames por segundo serão processados. Valores maiores = mais frames processados"
                 )
@@ -510,7 +508,7 @@ def main():
                 with info_col3:
                     st.metric("Tempo de Processamento Est.", f"~{(expected_processed_frames * 0.1):.1f}s" if expected_processed_frames > 0 else "N/A")
 
-                params_key = f"{video_id}_{model_type}_{min_pose_detection_confidence}_{min_pose_presence_confidence}_{fps_process}_{inference_scale}"
+                params_key = f"{video_id}_{model_type}_{min_pose_detection_confidence}_{min_pose_presence_confidence}_{fps_process}"
                 
                 st.divider()
                 
@@ -544,7 +542,8 @@ def main():
                     def _progress(current, total):
                         ratio = min(current / max(total, 1), 1.0)
                         progress_bar.progress(ratio)
-                        status_text.text(f"Processados: {current}/{max(total, 1)} frames")
+                        percentage = f"{ratio * 100:.0f}%"
+                        status_text.text(f"Processados: {current}/{max(total, 1)} frames ({percentage})")
 
                     start_process = time.time()
                     frames_list, processed_video_info = process_video(
@@ -553,7 +552,6 @@ def main():
                         fps_process=fps_process,
                         min_pose_detection_confidence=min_pose_detection_confidence,
                         min_pose_presence_confidence=min_pose_presence_confidence,
-                        inference_scale=inference_scale,
                         progress_callback=_progress,
                     )
                     elapsed = time.time() - start_process
@@ -570,7 +568,6 @@ def main():
                             'width': width,
                             'height': height,
                             'interval': processed_video_info['interval'],
-                            'inference_scale': inference_scale,
                             'model': model_type,
                             'min_pose_detection_confidence': min_pose_detection_confidence,
                             'min_pose_presence_confidence': min_pose_presence_confidence
@@ -632,7 +629,7 @@ def main():
                                         min_pose_presence_confidence
                                     )
                                     display = resize_image(processed, max_width=250, max_height=250)
-                                    st.image(display, channels="BGR", use_container_width=True)
+                                    st.image(display, channels="BGR", width='stretch')
                                     st.caption(f"Frame {int(frame_num)}")
                     
                     st.divider()
@@ -650,9 +647,12 @@ def main():
                     
                     col_csv, col_json, col_video = st.columns(3)
                     
+                    # Extrair nome do arquivo sem extensão
+                    video_filename = Path(uploaded_video.name).stem
+                    
                     with col_csv:
                         if st.button("📊 Exportar CSV", key='btn_export_csv_full'):
-                            csv_path = f"pose_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+                            csv_path = f"{video_filename}_{model_type}_{fps_process}fps_{exercise_label}.csv"
                             export_landmarks_to_csv(frames_data, video_info, csv_path, exercise=exercise_label)
                             
                             with open(csv_path, 'rb') as f:
@@ -667,7 +667,7 @@ def main():
                     
                     with col_json:
                         if st.button("📋 Exportar JSON", key='btn_export_json_full'):
-                            json_path = f"pose_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                            json_path = f"{video_filename}_{model_type}_{fps_process}fps.json"
                             export_landmarks_to_json(frames_data, video_info, json_path)
                             
                             with open(json_path, 'rb') as f:
@@ -681,10 +681,21 @@ def main():
                             os.remove(json_path)
                     
                     with col_video:
+                        st.write("**Opções de Exportação de Vídeo:**")
+                        video_export_type = st.radio(
+                            "Tipo de vídeo",
+                            options=["Completo (todos os frames)", "Apenas frames com landmarks"],
+                            index=0,
+                            key='video_export_type',
+                            horizontal=True
+                        )
+                        only_landmarks = video_export_type == "Apenas frames com landmarks"
+                        
                         if st.button("🎬 Exportar Vídeo", key='btn_export_video_full'):
                             st.info("⏳ Gerando vídeo com landmarks...")
                             
-                            output_video_path = f"pose_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+                            suffix = "_landmarks_only" if only_landmarks else "_full"
+                            output_video_path = f"{video_filename}_{model_type}_{fps_process}fps_{exercise_label}{suffix}.mp4"
 
                             progress_bar = st.progress(0)
                             status_text = st.empty()
@@ -692,7 +703,8 @@ def main():
                             def _export_progress(current, total):
                                 ratio = min(current / max(total, 1), 1.0)
                                 progress_bar.progress(ratio)
-                                status_text.text(f"Gerando: {current}/{max(total, 1)} frames")
+                                percentage = f"{ratio * 100:.0f}%"
+                                status_text.text(f"Gerando: {current}/{max(total, 1)} frames ({percentage})")
 
                             create_output_video(
                                 temp_video_path,
@@ -703,8 +715,10 @@ def main():
                                 min_pose_detection_confidence=min_pose_detection_confidence,
                                 min_pose_presence_confidence=min_pose_presence_confidence,
                                 progress_callback=_export_progress,
+                                only_with_landmarks=only_landmarks,
                             )
-                            status_text.text(f"✅ Vídeo gerado com {len(frames_data)} frames processados a {fps_process} FPS!")
+                            export_type = "com landmarks" if only_landmarks else "completo"
+                            status_text.text(f"✅ Vídeo {export_type} gerado com sucesso!")
                             
                             with open(output_video_path, 'rb') as f:
                                 st.download_button(

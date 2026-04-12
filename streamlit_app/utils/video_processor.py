@@ -12,7 +12,6 @@ def process_video(
     fps_process=15,
     min_pose_detection_confidence=0.2,
     min_pose_presence_confidence=0.2,
-    inference_scale=1.0,
     progress_callback=None,
 ):
     """
@@ -24,7 +23,6 @@ def process_video(
         fps_process: frames por segundo a processar
         min_pose_detection_confidence: confiança mínima de detecção
         min_pose_presence_confidence: confiança mínima de presença
-        inference_scale: escala do frame para inferência (0.3-1.0)
         progress_callback: função para callback de progresso
         
     Returns:
@@ -65,14 +63,6 @@ def process_video(
 
         timestamp_ms = int((frame_idx / max(original_fps, 1)) * 1000)
         frame_for_inference = frame
-        if inference_scale < 0.999:
-            frame_for_inference = cv2.resize(
-                frame,
-                None,
-                fx=inference_scale,
-                fy=inference_scale,
-                interpolation=cv2.INTER_AREA,
-            )
 
         start_time = time.time()
         if getattr(pose_detector, "video_mode", False):
@@ -134,6 +124,7 @@ def create_output_video(
     min_pose_detection_confidence=0.2,
     min_pose_presence_confidence=0.2,
     progress_callback=None,
+    only_with_landmarks=False,
 ):
     """
     Cria vídeo de saída com landmarks desenhados
@@ -147,46 +138,87 @@ def create_output_video(
         min_pose_detection_confidence: confiança mínima de detecção
         min_pose_presence_confidence: confiança mínima de presença
         progress_callback: função para callback de progresso
+        only_with_landmarks: se True, inclui apenas frames com landmarks detectados
     """
     cap = cv2.VideoCapture(video_path)
+    
+    # Calcular FPS ajustado se filtrar apenas frames com landmarks
+    output_fps = video_info['original_fps']
+    if only_with_landmarks:
+        # Contar frames com landmarks
+        frames_with_landmarks = sum(1 for f in frames_data if len(f['filtered_landmarks']) > 0)
+        # Ajustar FPS proporcionalmente
+        if frames_with_landmarks > 0 and video_info['total_frames'] > 0:
+            output_fps = video_info['original_fps'] * (frames_with_landmarks / video_info['total_frames'])
     
     # Criar writer de vídeo
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out = cv2.VideoWriter(
         output_path,
         fourcc,
-        video_info['original_fps'],
+        output_fps,
         (video_info['width'], video_info['height'])
     )
     
     frame_idx = 0
     data_idx = 0
     interval = video_info['interval']
+    frames_written = 0
+    
+    # Contar frames com landmarks para callback
+    frames_with_landmarks_count = sum(1 for f in frames_data if len(f['filtered_landmarks']) > 0) if only_with_landmarks else video_info['total_frames']
+    
+    # Manter última detecção válida para desenhar em frames intermediários
+    last_landmarks = None
+    last_visibility = None
+    last_presence = None
+    last_had_landmarks = False
     
     while True:
         ret, frame = cap.read()
         if not ret:
             break
         
-        # Se este frame foi processado, desenhar landmarks
-        if frame_idx % interval == 0 and data_idx < len(frames_data):
+        # Flag para indicar se este frame foi processado
+        frame_processed = frame_idx % interval == 0 and data_idx < len(frames_data)
+        
+        # Se este frame foi processado, atualizar a última detecção
+        if frame_processed:
             data = frames_data[data_idx]
+            last_landmarks = data['landmarks']
+            last_visibility = data['visibility']
+            last_presence = data['presence']
+            # Verificar se tem landmarks com confiança suficiente
+            last_had_landmarks = len(data['filtered_landmarks']) > 0
+            data_idx += 1
+        else:
+            # Para frames intermediários, resetar a flag se filtrar apenas com landmarks
+            if only_with_landmarks:
+                last_had_landmarks = False
+        
+        # Se filtrar apenas frames com landmarks, pular frames sem landmarks
+        if only_with_landmarks and not last_had_landmarks:
+            frame_idx += 1
+            continue
+        
+        # Desenhar landmarks usando a última detecção válida
+        if last_landmarks is not None:
             frame = draw_landmarks_on_image(
                 frame,
-                data['landmarks'],
-                data['visibility'],
-                data['presence'],
+                last_landmarks,
+                last_visibility,
+                last_presence,
                 min_pose_detection_confidence,
                 min_pose_presence_confidence,
             )
-            data_idx += 1
         
         # Escrever frame
         out.write(frame)
+        frames_written += 1
         frame_idx += 1
         
         if progress_callback:
-            progress_callback(frame_idx, video_info['total_frames'])
+            progress_callback(frames_written, frames_with_landmarks_count)
     
     cap.release()
     out.release()
