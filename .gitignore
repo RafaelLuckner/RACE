@@ -2,7 +2,8 @@ Documentos
 download*
 images/
 *.mp4
-
+*.csv
+*.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

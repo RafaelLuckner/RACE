@@ -143,22 +143,41 @@ def create_output_video(
     cap = cv2.VideoCapture(video_path)
     
     # Calcular FPS ajustado se filtrar apenas frames com landmarks
-    output_fps = video_info['original_fps']
+    output_fps = float(video_info['original_fps'])
     if only_with_landmarks:
         # Contar frames com landmarks
         frames_with_landmarks = sum(1 for f in frames_data if len(f['filtered_landmarks']) > 0)
         # Ajustar FPS proporcionalmente
         if frames_with_landmarks > 0 and video_info['total_frames'] > 0:
-            output_fps = video_info['original_fps'] * (frames_with_landmarks / video_info['total_frames'])
+            output_fps = float(video_info['original_fps'] * (frames_with_landmarks / video_info['total_frames']))
     
-    # Criar writer de vídeo
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(
-        output_path,
-        fourcc,
-        output_fps,
-        (video_info['width'], video_info['height'])
-    )
+    # Garantir FPS válido
+    output_fps = max(1.0, min(output_fps, 120.0))
+    
+    # Criar writer de vídeo com codec compatível
+    # Tentar diferentes codecs em ordem de preferência
+    fourcc_options = [
+        ('H264', cv2.VideoWriter_fourcc(*'H264')),  # H.264
+        ('avc1', cv2.VideoWriter_fourcc(*'avc1')),  # MPEG-4 Part 10
+        ('XVID', cv2.VideoWriter_fourcc(*'XVID')),  # MPEG-4 Part 2 (XVID)
+        ('mp4v', cv2.VideoWriter_fourcc(*'mp4v')),  # MPEG-4 Part 2
+        ('MJPG', cv2.VideoWriter_fourcc(*'MJPG')),  # Motion JPEG (fallback)
+    ]
+    
+    out = None
+    for codec_name, fourcc in fourcc_options:
+        out = cv2.VideoWriter(
+            output_path,
+            fourcc,
+            output_fps,
+            (video_info['width'], video_info['height'])
+        )
+        if out.isOpened():
+            break
+        out.release()
+    
+    if not out or not out.isOpened():
+        raise RuntimeError(f"Não foi possível criar o VideoWriter com nenhum codec disponível")
     
     frame_idx = 0
     data_idx = 0
