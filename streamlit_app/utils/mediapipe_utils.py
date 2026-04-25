@@ -80,8 +80,9 @@ class PoseLandmarker:
             visibility: lista de visibilidade
             presence: lista de presença
         """
-        # Converter BGR para RGB
-        rgb_image = image[:, :, ::-1]
+        # Converter BGR para RGB e garantir que está contíguo na memória
+        rgb_image = np.ascontiguousarray(image[:, :, ::-1])
+        rgb_image = rgb_image.astype(np.uint8)
         
         # Criar imagem do MediaPipe
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
@@ -118,8 +119,9 @@ class PoseLandmarker:
             visibility: lista de visibilidade
             presence: lista de presença
         """
-        # Converter BGR para RGB
-        rgb_image = image[:, :, ::-1]
+        # Converter BGR para RGB e garantir que está contíguo na memória
+        rgb_image = np.ascontiguousarray(image[:, :, ::-1])
+        rgb_image = rgb_image.astype(np.uint8)
         
         # Criar imagem do MediaPipe
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)

@@ -3,7 +3,12 @@ download*
 images/
 *.mp4
 *.csv
-*.ipynb
+/notebooks/
+videos_input/
+videos_output/
+files_output/
+
+3-lstm_training.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -18,6 +18,7 @@ def export_landmarks_to_csv(frames_data, video_info, output_path, exercise=None)
         exercise: nome do exercício para adicionar em todas as linhas
     """
     data = []
+    model = video_info.get('model', 'unknown')
     
     for frame_data in frames_data:
         # Usar ALL landmarks, não apenas filtered_landmarks
@@ -40,7 +41,7 @@ def export_landmarks_to_csv(frames_data, video_info, output_path, exercise=None)
                 'frame': frame_data['frame_idx'],
                 'processed_frame': frame_data.get('processed_frame_idx', frame_data['frame_idx']),
                 'timestamp_s': frame_data['timestamp'],
-                'model': frame_data.get('model', 'unknown'),
+                'model': model,
                 'processing_time_ms': frame_data.get('processing_time', 0) * 1000,
                 'landmark_idx': idx,
                 'landmark_name': landmark_name,
@@ -76,7 +77,10 @@ def export_landmarks_to_json(frames_data, video_info, output_path):
             'fps': video_info['original_fps'],
             'width': video_info['width'],
             'height': video_info['height'],
-            'fps_process': video_info['fps_process']
+            'fps_process': video_info['fps_process'],
+            'model': video_info.get('model', 'unknown'),
+            'min_pose_detection_confidence': video_info.get('min_pose_detection_confidence', 0.2),
+            'min_pose_presence_confidence': video_info.get('min_pose_presence_confidence', 0.2)
         },
         'frames': []
     }
@@ -86,7 +90,6 @@ def export_landmarks_to_json(frames_data, video_info, output_path):
             'frame_idx': frame_data['frame_idx'],
             'processed_frame_idx': frame_data['processed_frame_idx'],
             'timestamp': frame_data['timestamp'],
-            'model': frame_data.get('model', 'unknown'),
             'processing_time_ms': frame_data.get('processing_time', 0) * 1000,
             'landmarks': []
         }
