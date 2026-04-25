@@ -63,7 +63,9 @@ python -m streamlit run streamlit_app/app.py
         ↓
 [Normalização MinMaxScaler]
         ↓
-[Modelo ML - Random Forest ou LSTM]
+[Criação de janela deslizante com últimos 15 frames (3 seg)]
+        ↓
+[Modelo ML - Random Forest]
         ↓
 [Classificação do Exercício]
         ↓
