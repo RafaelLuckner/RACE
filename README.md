@@ -4,7 +4,7 @@ Projeto de TCC focado em análise de pose corporal e classificação automática
 
 ## 📋 Sobre o Projeto
 
-O RACE é um sistema inteligente que detecta e classifica atividades físicas a partir de vídeos. Utiliza **MediaPipe** para extração de landmarks da pose corporal e modelos de **machine learning** (Random Forest e LSTM) para classificação de exercícios em tempo real.
+O RACE é um sistema inteligente que detecta e classifica atividades físicas a partir de vídeos. Utiliza **MediaPipe** para extração de landmarks da pose corporal e modelos de **machine learning** (Random Forest) para classificação de exercícios em tempo real.
 
 ### Exercícios Suportados
 - 🏋️ **Rosca Direta** (Bicep Curl)
@@ -12,63 +12,6 @@ O RACE é um sistema inteligente que detecta e classifica atividades físicas a 
 - 🤸 **Agachamento** (Squats)
 - 😴 **Descanso** (Rest)
 
-## 🏗️ Arquitetura do Projeto
-
-```
-RACE - TCC/
-├── 📓 Notebooks de Análise e Treinamento
-│   ├── 1-Análise_detalhada_landmarks.ipynb      # Exploração de landmarks MediaPipe
-│   ├── 2-random_forest_training.ipynb           # Treinamento do modelo Random Forest
-│   ├── 3-lstm_training.ipynb                    # Treinamento do modelo LSTM
-│   └── notebooks/
-│       ├── pose_video_analysis.ipynb
-│       └── teste_presenca_visibilidade.ipynb
-│
-├── 🤖 Aplicações
-│   ├── prediction_app/                          # App com modelo Random Forest
-│   │   ├── app.py
-│   │   └── utils/
-│   │       ├── angle_utils.py                   # Cálculo de ângulos articulares
-│   │       ├── constants.py                     # Constantes do projeto
-│   │       ├── feature_utils.py                 # Extração de features
-│   │       ├── model_utils.py                   # Carregamento de modelos
-│   │       ├── pose_utils.py                    # Detecção de pose
-│   │       └── video_pipeline.py                # Pipeline de vídeo
-│   │
-│   └── streamlit_app/                           # App Streamlit completo
-│       ├── app.py                               # Interface principal
-│       ├── config.py                            # Configurações
-│       ├── requirements.txt                     # Dependências
-│       └── utils/
-│           ├── mediapipe_utils.py               # Utilitários MediaPipe
-│           ├── image_processor.py               # Processamento de imagens
-│           ├── video_processor.py               # Processamento de vídeos
-│           └── export_utils.py                  # Exportação de dados
-│
-├── 📁 Modelos Treinados
-│   ├── ml_models/                               # Modelos ML (pickle, joblib)
-│   └── models/                                  # Modelos MediaPipe
-│       ├── pose_landmarker_lite.task
-│       ├── pose_landmarker_full.task
-│       └── pose_landmarker_heavy.task
-│
-├── 📊 Dados
-│   ├── files_output/                            # CSVs com dados extraídos
-│   │   ├── 1_min_flexao_full_5fps_flexao.csv
-│   │   ├── 2_min_agachamento_full_5fps_agachamento.csv
-│   │   ├── 2_min_descanso_full_5fps_descanso.csv
-│   │   └── 2_min_rosca_direta_full_5fps_rosca_biceps.csv
-│   ├── videos_input/                            # Vídeos de entrada
-│   └── videos_output/                           # Vídeos processados com anotações
-│
-├── 📖 Documentação
-│   ├── README.md                                # Este arquivo
-│   └── ARCHITECTURE.md                          # Detalhes técnicos da arquitetura
-│
-└── 📚 Utilitários
-    └── utils/
-        └── calculador_angulos.py                # Cálculo de ângulos
-```
 
 ## 🚀 Como Usar
 
