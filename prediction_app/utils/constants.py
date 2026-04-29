@@ -12,14 +12,18 @@ DEFAULT_MIN_POSE_DETECTION_CONFIDENCE = 0.2
 DEFAULT_MIN_POSE_PRESENCE_CONFIDENCE = 0.2
 DEFAULT_POSE_MODEL_VARIANT = "full"
 
+# IMPORTANT: This order MUST match the training notebook (2-random_forest_training.ipynb line 260)
+# Training used: window_size=15, angle_columns in this exact order
+# Total features: 15 frames × 8 angles = 120 features
+TRAINING_WINDOW_SIZE = 15
 ANGLE_COLUMNS = [
     "right_cotovelo",
-    "right_ombro",
     "left_cotovelo",
+    "right_ombro",
     "left_ombro",
     "right_joelho",
-    "right_quadril",
     "left_joelho",
+    "right_quadril",
     "left_quadril",
 ]
 

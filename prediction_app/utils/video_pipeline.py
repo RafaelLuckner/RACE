@@ -15,6 +15,7 @@ import pandas as pd
 from .angle_utils import extract_angles_from_frame
 from .constants import (
     ANGLE_COLUMNS,
+    TRAINING_WINDOW_SIZE,
     DEFAULT_MIN_POSE_DETECTION_CONFIDENCE,
     DEFAULT_MIN_POSE_PRESENCE_CONFIDENCE,
     DEFAULT_OUTPUT_DIR,
@@ -177,12 +178,28 @@ class RandomForestVideoPredictor:
                 "Try reducing process_fps threshold constraints or check landmark detection quality."
             )
 
+        # Ensure all expected columns exist and in correct order
         for col in self.expected_feature_columns:
             if col not in X.columns:
                 X[col] = 0.0
+        
+        # Reorder columns to match training order
         X = X[self.expected_feature_columns]
-
-        X_scaled = self.scaler.transform(X)
+        
+        # Fill any remaining NaN values with 0
+        X = X.fillna(0.0)
+        
+        # DEBUG: Validate column count and names
+        if X.shape[1] != len(self.expected_feature_columns):
+            raise ValueError(
+                f"Feature count mismatch: expected {len(self.expected_feature_columns)} "
+                f"(window_size={self.window_size} × angles={len(self.angle_columns)}), "
+                f"got {X.shape[1]}"
+            )
+        
+        # Convert to numpy array for scaler (avoids pandas index/column name issues)
+        X_array = X.values.astype(np.float64)
+        X_scaled = self.scaler.transform(X_array)
         probabilities = self.model.predict_proba(X_scaled)
         max_indices = np.argmax(probabilities, axis=1)
         pred_ids = [int(self.model_classes[idx]) for idx in max_indices]
