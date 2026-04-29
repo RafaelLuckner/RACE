@@ -10,6 +10,7 @@ import streamlit as st
 
 from utils.constants import (
     ANGLE_COLUMNS,
+    TRAINING_WINDOW_SIZE,
     DEFAULT_MIN_POSE_DETECTION_CONFIDENCE,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_POSE_MODEL_VARIANT,
@@ -17,7 +18,6 @@ from utils.constants import (
     ML_MODELS_DIR,
 )
 from utils.model_utils import (
-    infer_window_size_from_scaler,
     load_model_artifacts,
 )
 from utils.pose_utils import PoseLandmarkerDetector
@@ -106,7 +106,16 @@ if uploaded_video is not None:
                 st.info("⏳ Carregando modelos...")
             
             model, scaler, class_name_to_id, class_id_to_name, _ = load_model_artifacts(ML_MODELS_DIR)
-            inferred_window_size = infer_window_size_from_scaler(scaler, ANGLE_COLUMNS)
+            
+            # Use TRAINING_WINDOW_SIZE (15) to match notebook training
+            # Validate that scaler was fitted with correct feature count
+            expected_feature_count = TRAINING_WINDOW_SIZE * len(ANGLE_COLUMNS)
+            actual_feature_count = getattr(scaler, 'n_features_in_', None)
+            if actual_feature_count != expected_feature_count:
+                st.error(f"❌ Erro: Scaler espera {actual_feature_count} features, mas esperamos {expected_feature_count} (window_size={TRAINING_WINDOW_SIZE} × angles={len(ANGLE_COLUMNS)})")
+                st.stop()
+            
+            window_size = TRAINING_WINDOW_SIZE
 
             # Preparar vídeo temporário
             tmp_video_path = None
@@ -134,7 +143,7 @@ if uploaded_video is not None:
                 class_name_to_id=class_name_to_id,
                 class_id_to_name=class_id_to_name,
                 pose_detector=pose_detector,
-                window_size=inferred_window_size,
+                window_size=window_size,
                 process_fps=DEFAULT_PROCESS_FPS,
                 angle_columns=ANGLE_COLUMNS,
                 min_pose_detection_confidence=min_pose_confidence,

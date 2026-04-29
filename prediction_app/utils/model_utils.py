@@ -86,9 +86,46 @@ def infer_window_size_from_scaler(scaler, angle_columns: List[str] | None = None
 
 
 def build_feature_columns(window_size: int, angle_columns: List[str] | None = None) -> List[str]:
+    """
+    Builds feature column names in the exact order used during training.
+    
+    IMPORTANT: The order of angle_columns MUST match training (2-random_forest_training.ipynb):
+    right_cotovelo, left_cotovelo, right_ombro, left_ombro, right_joelho, left_joelho, right_quadril, left_quadril
+    """
     columns = angle_columns or ANGLE_COLUMNS
     feature_columns = []
     for frame_idx in range(1, window_size + 1):
         for angle_col in columns:
             feature_columns.append(f"frame_{frame_idx}_{angle_col}")
     return feature_columns
+
+
+def validate_feature_columns(X: 'pd.DataFrame', expected_window_size: int, angle_columns: List[str] | None = None) -> Tuple[bool, str]:
+    """
+    Validates that feature columns match expected training format.
+    
+    Args:
+        X: Feature DataFrame
+        expected_window_size: Window size used during training (should be 15)
+        angle_columns: Angle columns used (should match ANGLE_COLUMNS)
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    columns = angle_columns or ANGLE_COLUMNS
+    expected_columns = build_feature_columns(expected_window_size, columns)
+    
+    if X.empty:
+        return True, ""  # Empty dataframe is OK
+    
+    # Check if columns exist and are in correct order
+    missing_cols = [col for col in expected_columns if col not in X.columns]
+    if missing_cols:
+        return False, f"Missing columns: {missing_cols[:5]}..."
+    
+    # Check if first few columns match (order validation)
+    actual_cols = list(X.columns)
+    if actual_cols[:len(expected_columns)] != expected_columns:
+        return False, f"Column order mismatch. Expected first cols: {expected_columns[:3]}, got: {actual_cols[:3]}"
+    
+    return True, ""
