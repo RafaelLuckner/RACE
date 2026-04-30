@@ -22,6 +22,7 @@ from utils.model_utils import (
 )
 from utils.pose_utils import PoseLandmarkerDetector
 from utils.video_pipeline import RandomForestVideoPredictor
+from utils.video_validation import get_compatible_preview_video, validate_video
 
 
 # Inicializar session state
@@ -29,6 +30,8 @@ if "processing_result" not in st.session_state:
     st.session_state.processing_result = None
 if "uploaded_file_key" not in st.session_state:
     st.session_state.uploaded_file_key = None
+if "preview_video_path" not in st.session_state:
+    st.session_state.preview_video_path = None
 
 
 st.set_page_config(page_title="Prediction App - Random Forest", layout="wide")
@@ -87,7 +90,41 @@ if uploaded_video is not None:
         st.session_state.uploaded_file_key = uploaded_video.file_id
     
     st.subheader("📺 Prévia do vídeo")
-    st.video(uploaded_video, width=300)
+    
+    # Validar e reconverter vídeo se necessário
+    preview_status = st.empty()
+    
+    try:
+        with preview_status.container():
+            st.info("🔄 Processando vídeo para prévia...")
+        
+        preview_video_path, was_converted = get_compatible_preview_video(uploaded_video)
+        
+        preview_status.empty()
+        
+        if was_converted:
+            st.info("ℹ️ Vídeo foi reconvertido para formato compatível (comum em vídeos do WhatsApp)")
+        
+        # Exibir vídeo
+        with open(preview_video_path, "rb") as video_file:
+            st.video(video_file, format="video/mp4", width=300)
+        
+        # Armazenar caminho para uso posterior
+        st.session_state.preview_video_path = preview_video_path
+        
+    except Exception as e:
+        preview_status.empty()
+        st.error(f"❌ Erro ao processar vídeo para prévia: {str(e)}")
+        st.info("""
+        **Dicas para resolver o problema:**
+        - Tente reconverter o vídeo em seu computador usando:
+          - Windows: Windows Media Player (Arquivo → Salvar como)
+          - Mac: QuickTime (Arquivo → Exportar como)
+          - Online: CloudConvert (cloudconvert.com)
+        - Use um vídeo em formato MP4 com codec H.264
+        - Se o problema persistir, ajuste o tamanho do vídeo
+        """)
+        st.stop()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -122,6 +159,12 @@ if uploaded_video is not None:
             with tempfile.NamedTemporaryFile(delete=False, suffix=f"_{uploaded_video.name}") as tmp_file:
                 tmp_file.write(uploaded_video.getbuffer())
                 tmp_video_path = Path(tmp_file.name)
+
+            # Validar se o vídeo pode ser processado
+            is_valid, validation_msg = validate_video(tmp_video_path)
+            if not is_valid:
+                st.error(f"❌ Vídeo inválido: {validation_msg}")
+                st.stop()
 
             # Processar vídeo
             pose_detector = PoseLandmarkerDetector(
@@ -168,7 +211,24 @@ if uploaded_video is not None:
         except Exception as exc:
             status_placeholder.empty()
             progress_placeholder.empty()
-            st.error(f"❌ Erro durante processamento: {exc}")
+            
+            error_msg = str(exc)
+            st.error(f"❌ Erro durante processamento: {error_msg}")
+            
+            # Dicas adicionais para certos erros
+            if "Could not open video" in error_msg or "not open" in error_msg.lower():
+                st.warning("""
+                **O vídeo não pôde ser aberto para processamento.** 
+                - Verifique se o arquivo não está corrompido
+                - Tente reconverter o vídeo em outro formato
+                - Use MP4 com codec H.264 (mais compatível)
+                """)
+            elif "scaler" in error_msg.lower() or "feature" in error_msg.lower():
+                st.warning("**Erro no processamento de features.** Verifique se o modelo foi treinado corretamente.")
+            
+            import traceback
+            with st.expander("📋 Detalhes técnicos"):
+                st.code(traceback.format_exc(), language="python")
 
     # Mostrar resultado se existir
     if st.session_state.processing_result is not None:
