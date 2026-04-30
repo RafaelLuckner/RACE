@@ -31,6 +31,7 @@ def extract_angles_from_landmarks(df):
     """
     Extrai ângulos articulares dos dados de landmarks.
     IMPORTANTE: Processa cada exercício SEPARADAMENTE para evitar perda de dados.
+    Inclui pesos de visibilidade para cada ângulo calculado.
     """
     landmarks = {
         'left_shoulder': 11,
@@ -57,11 +58,14 @@ def extract_angles_from_landmarks(df):
             frame_df = exercise_df[exercise_df['frame'] == frame_id]
 
             landmarks_coords = {}
+            landmarks_visibility = {}
+            
             for _, row in frame_df.iterrows():
                 landmark_idx = int(row['landmark_idx'])
                 for name, lm_idx in landmarks.items():
                     if landmark_idx == lm_idx:
                         landmarks_coords[name] = [row['x'], row['y']]
+                        landmarks_visibility[name] = row['visibility']
 
             if len(landmarks_coords) < 8:
                 continue
@@ -79,6 +83,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['right_elbow'],
                     landmarks_coords['right_wrist'],
                 )
+                angles['right_cotovelo_visibility_weight'] = np.mean([
+                    landmarks_visibility['right_shoulder'],
+                    landmarks_visibility['right_elbow'],
+                    landmarks_visibility['right_wrist']
+                ])
 
             # Cotovelo Esquerdo: flexão/extensão (ombro → cotovelo → pulso)
             if all(k in landmarks_coords for k in ['left_shoulder', 'left_elbow', 'left_wrist']):
@@ -87,6 +96,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['left_elbow'],
                     landmarks_coords['left_wrist'],
                 )
+                angles['left_cotovelo_visibility_weight'] = np.mean([
+                    landmarks_visibility['left_shoulder'],
+                    landmarks_visibility['left_elbow'],
+                    landmarks_visibility['left_wrist']
+                ])
 
             # Ombro Direito: abução/adução (cotovelo → ombro → quadril)
             if all(k in landmarks_coords for k in ['right_elbow', 'right_shoulder', 'right_hip']):
@@ -95,6 +109,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['right_shoulder'],
                     landmarks_coords['right_hip'],
                 )
+                angles['right_ombro_visibility_weight'] = np.mean([
+                    landmarks_visibility['right_elbow'],
+                    landmarks_visibility['right_shoulder'],
+                    landmarks_visibility['right_hip']
+                ])
 
             # Ombro Esquerdo: abução/adução (cotovelo → ombro → quadril)
             if all(k in landmarks_coords for k in ['left_elbow', 'left_shoulder', 'left_hip']):
@@ -103,6 +122,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['left_shoulder'],
                     landmarks_coords['left_hip'],
                 )
+                angles['left_ombro_visibility_weight'] = np.mean([
+                    landmarks_visibility['left_elbow'],
+                    landmarks_visibility['left_shoulder'],
+                    landmarks_visibility['left_hip']
+                ])
 
             # Joelho Direito: flexão/extensão (quadril → joelho → tornozelo)
             if all(k in landmarks_coords for k in ['right_hip', 'right_knee', 'right_ankle']):
@@ -111,6 +135,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['right_knee'],
                     landmarks_coords['right_ankle'],
                 )
+                angles['right_joelho_visibility_weight'] = np.mean([
+                    landmarks_visibility['right_hip'],
+                    landmarks_visibility['right_knee'],
+                    landmarks_visibility['right_ankle']
+                ])
 
             # Joelho Esquerdo: flexão/extensão (quadril → joelho → tornozelo)
             if all(k in landmarks_coords for k in ['left_hip', 'left_knee', 'left_ankle']):
@@ -119,6 +148,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['left_knee'],
                     landmarks_coords['left_ankle'],
                 )
+                angles['left_joelho_visibility_weight'] = np.mean([
+                    landmarks_visibility['left_hip'],
+                    landmarks_visibility['left_knee'],
+                    landmarks_visibility['left_ankle']
+                ])
 
             # Quadril Direito: flexão/extensão (joelho → quadril → ombro)
             if all(k in landmarks_coords for k in ['right_knee', 'right_hip', 'right_shoulder']):
@@ -127,6 +161,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['right_hip'],
                     landmarks_coords['right_shoulder'],
                 )
+                angles['right_quadril_visibility_weight'] = np.mean([
+                    landmarks_visibility['right_knee'],
+                    landmarks_visibility['right_hip'],
+                    landmarks_visibility['right_shoulder']
+                ])
 
             # Quadril Esquerdo: flexão/extensão (joelho → quadril → ombro)
             if all(k in landmarks_coords for k in ['left_knee', 'left_hip', 'left_shoulder']):
@@ -135,6 +174,11 @@ def extract_angles_from_landmarks(df):
                     landmarks_coords['left_hip'],
                     landmarks_coords['left_shoulder'],
                 )
+                angles['left_quadril_visibility_weight'] = np.mean([
+                    landmarks_visibility['left_knee'],
+                    landmarks_visibility['left_hip'],
+                    landmarks_visibility['left_shoulder']
+                ])
 
             frames_data.append(angles)
 

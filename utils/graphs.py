@@ -175,17 +175,28 @@ def detectar_repeticoes_exercicio(df_angles, articulacoes='cotovelo',
     if len(distance_vales) != len(articulacoes):
         raise ValueError("distance_vales deve ter mesmo tamanho de articulacoes")
     
-    # Criar coluna agregada para cada articulação
+    # Criar coluna agregada para cada articulação com média ponderada pela visibilidade
     df = df_angles.copy()
     for art in articulacoes:
         col_name = art.lower()
         col_left = f'left_{art.lower()}'
         col_right = f'right_{art.lower()}'
+        col_left_weight = f'left_{art.lower()}_visibility_weight'
+        col_right_weight = f'right_{art.lower()}_visibility_weight'
         
         if col_left not in df.columns or col_right not in df.columns:
             raise ValueError(f"Colunas não encontradas: {col_left}, {col_right}")
         
-        df[col_name] = df[[col_left, col_right]].mean(axis=1)
+        # Verificar se existem colunas de peso de visibilidade
+        if col_left_weight in df.columns and col_right_weight in df.columns:
+            # Usar média ponderada pela visibilidade
+            total_weight = df[col_left_weight] + df[col_right_weight]
+            # Evitar divisão por zero
+            total_weight = total_weight.replace(0, 1e-10)
+            df[col_name] = (df[col_left] * df[col_left_weight] + df[col_right] * df[col_right_weight]) / total_weight
+        else:
+            # Fallback para média simples se os pesos não existirem
+            df[col_name] = df[[col_left, col_right]].mean(axis=1)
     
     # Definir layout dinâmico
     n = len(articulacoes)
@@ -247,7 +258,7 @@ def detectar_repeticoes_exercicio(df_angles, articulacoes='cotovelo',
                       edgecolors='darkred', linewidth=1.5)
             
             for i, p in enumerate(picos):
-                ax.annotate(str(i), xy=(serie.index[p], serie.iloc[p]),
+                ax.annotate(str(i+1), xy=(serie.index[p], serie.iloc[p]),
                            xytext=(0, 12), textcoords='offset points', 
                            ha='center', va='bottom', fontsize=fontsize*0.8, fontweight='bold',
                            bbox=dict(boxstyle='round,pad=0.4', facecolor='#FADBD8', alpha=0.9),
@@ -261,7 +272,7 @@ def detectar_repeticoes_exercicio(df_angles, articulacoes='cotovelo',
                       edgecolors='darkblue', linewidth=1.5)
             
             for i, v in enumerate(vales):
-                ax.annotate(str(i), xy=(serie.index[v], serie.iloc[v]),
+                ax.annotate(str(i+1), xy=(serie.index[v], serie.iloc[v]),
                            xytext=(0, -12), textcoords='offset points', 
                            ha='center', va='top', fontsize=fontsize*0.8, fontweight='bold',
                            bbox=dict(boxstyle='round,pad=0.4', facecolor='#D6EAF8', alpha=0.9),
