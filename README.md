@@ -6,7 +6,7 @@ colorTo: green
 sdk: streamlit
 sdk_version: "1.55.0"
 python_version: "3.11"
-app_file: streamlit_app/app.py
+app_file: prediction_app/app.py
 pinned: false
 ---
 
