@@ -3,10 +3,28 @@
 from __future__ import annotations
 
 import tempfile
+import time as _time
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+# Tradução dos nomes das classes
+CLASS_LABELS: dict = {
+    "flexao":       "Flexão",
+    "agachamento":  "Agachamento",
+    "rosca_biceps": "Rosca Bíceps",
+    "descanso":     "Descanso",
+}
+EX_ICONS: dict = {
+    "flexao":       "💪",
+    "agachamento":  "🏋️",
+    "rosca_biceps": "🦾",
+    "descanso":     "😴",
+}
+
+def _label(class_name: str) -> str:
+    return CLASS_LABELS.get(class_name, class_name.replace("_", " ").title())
 
 from utils.constants import (
     ANGLE_COLUMNS,
@@ -152,6 +170,8 @@ if uploaded_video is not None:
     if process_button:
         progress_placeholder = st.empty()
         status_placeholder = st.empty()
+        timer_placeholder = st.empty()
+        _start_time = _time.time()
         
         try:
             # Carregar modelos (cacheados — só carregam uma vez por sessão)
@@ -188,6 +208,8 @@ if uploaded_video is not None:
             def progress_callback(current_frame, total_frames, stage):
                 progress = current_frame / max(total_frames, 1)
                 progress_placeholder.progress(progress)
+                elapsed = _time.time() - _start_time
+                timer_placeholder.caption(f"⏱️ Tempo decorrido: {elapsed:.1f}s")
                 status_placeholder.info(f"🔄 {stage}: Frame {current_frame}/{total_frames}")
 
             predictor = RandomForestVideoPredictor(
@@ -213,16 +235,19 @@ if uploaded_video is not None:
             st.session_state.processing_result = result
 
             # Limpar status
+            _elapsed = _time.time() - _start_time
             progress_placeholder.empty()
             status_placeholder.empty()
+            timer_placeholder.empty()
             
-            st.success("✅ Processamento concluído!")
+            st.success(f"✅ Processamento concluído em {_elapsed:.1f}s!")
 
             st.rerun()
 
         except Exception as exc:
             status_placeholder.empty()
             progress_placeholder.empty()
+            timer_placeholder.empty()
             
             error_msg = str(exc)
             st.error(f"❌ Erro durante processamento: {error_msg}")
@@ -247,15 +272,30 @@ if uploaded_video is not None:
         result = st.session_state.processing_result
         summary = result["summary"]
         rep_counts = result.get("rep_counts", {})
+        time_per_exercise = result.get("time_per_exercise", {})
 
         st.divider()
         st.subheader("📊 Resultados")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("🎯 Exercício final", summary.get("final_prediction") or "N/A")
-        with col2:
-            st.metric("📊 Janelas processadas", int(summary.get("total_windows", 0)))
+        # Tabela de exercícios: contagem de repetições e tempo
+        exercises = [ex for ex in ["agachamento", "flexao", "rosca_biceps", "descanso"]
+                     if ex in rep_counts or ex in time_per_exercise]
+        if exercises:
+            st.subheader("🏅 Detalhes por exercício")
+            cols = st.columns(len(exercises))
+            for i, ex in enumerate(exercises):
+                with cols[i]:
+                    reps = rep_counts.get(ex, 0)
+                    secs = time_per_exercise.get(ex, 0.0)
+                    mins = int(secs // 60)
+                    s = int(secs % 60)
+                    tempo_str = f"{mins}m {s:02d}s" if mins > 0 else f"{s}s"
+                    icon = EX_ICONS.get(ex, "")
+                    st.metric(
+                        label=f"{icon} {_label(ex)}",
+                        value=f"{reps} reps" if ex != "descanso" else tempo_str,
+                        delta=tempo_str if ex != "descanso" else None,
+                    )
 
         st.subheader("🎬 Vídeo com anotações")
         

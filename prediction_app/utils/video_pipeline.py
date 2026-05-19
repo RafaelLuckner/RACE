@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -741,8 +742,37 @@ class RandomForestVideoPredictor:
         frame_predictions_path = run_dir / f"{input_path.stem}_frame_predictions.csv"
         frame_predictions_df.to_csv(frame_predictions_path, index=False)
 
+        # Calcular tempo por exercício a partir dos frames
+        time_per_exercise: Dict[str, float] = {}
+        if "pred_label_name" in frame_predictions_df.columns and "timestamp_s" in frame_predictions_df.columns:
+            fps = float(video_info["fps"])
+            frame_duration = 1.0 / max(fps, 1.0)
+            labeled = frame_predictions_df.dropna(subset=["pred_label_name"])
+            for ex, group in labeled.groupby("pred_label_name"):
+                time_per_exercise[str(ex)] = round(len(group) * frame_duration, 1)
+
+        # Re-encodar para H.264 para compatibilidade com browsers
+        try:
+            h264_path = output_video_path.with_name(output_video_path.stem + "_web.mp4")
+            subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", str(output_video_path),
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                    "-movflags", "+faststart",
+                    "-an",
+                    str(h264_path),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            output_video_path.unlink(missing_ok=True)
+            output_video_path = h264_path
+        except Exception:
+            pass  # Mantém o vídeo original se ffmpeg falhar
+
         summary = self._build_summary(predictions_df, video_info)
         summary["rep_counts"] = live_rep_counts
+        summary["time_per_exercise"] = time_per_exercise
         summary_path = run_dir / f"{input_path.stem}_summary.json"
         with open(summary_path, "w", encoding="utf-8") as file_obj:
             json.dump(summary, file_obj, indent=2, ensure_ascii=False)
@@ -756,5 +786,6 @@ class RandomForestVideoPredictor:
             "summary_path": summary_path,
             "summary": summary,
             "rep_counts": live_rep_counts,
+            "time_per_exercise": time_per_exercise,
             "video_info": video_info,
         }
