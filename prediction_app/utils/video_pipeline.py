@@ -755,6 +755,9 @@ class RandomForestVideoPredictor:
                 time_per_exercise[str(ex)] = round(len(group) * frame_duration, 1)
 
         # Re-encodar para H.264 para compatibilidade com browsers
+        if self.progress_callback:
+            total = int(video_info["total_frames"])
+            self.progress_callback(total, total, "Codificando video H.264")
         try:
             h264_path = output_video_path.with_name(output_video_path.stem + "_web.mp4")
             subprocess.run(
