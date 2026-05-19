@@ -1,3 +1,15 @@
+---
+title: RACE - Análise de Exercícios com IA
+emoji: 🏋️
+colorFrom: blue
+colorTo: green
+sdk: streamlit
+sdk_version: "1.55.0"
+python_version: "3.10"
+app_file: streamlit_app/app.py
+pinned: false
+---
+
 # RACE - Reconhecimento de Atividades e Análise de Comportamento Corporal
 
 Projeto de TCC focado em análise de pose corporal e classificação automática de exercícios físicos utilizando visão computacional e machine learning.
