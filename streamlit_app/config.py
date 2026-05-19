@@ -1,8 +1,8 @@
 """Configurações do aplicativo Streamlit"""
 
 # MediaPipe Pose
-MODEL_PATH_HEAVY = "../models/pose_landmarker_heavy.task"
-MODEL_PATH_LITE = "../models/pose_landmarker_lite.task"
+MODEL_PATH_HEAVY = "models/pose_landmarker_heavy.task"
+MODEL_PATH_LITE = "models/pose_landmarker_lite.task"
 
 # Configurações padrão
 DEFAULT_CONFIDENCE = 0.2
