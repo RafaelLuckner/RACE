@@ -13,7 +13,7 @@ import streamlit as st
 CLASS_LABELS: dict = {
     "flexao":       "Flexão",
     "agachamento":  "Agachamento",
-    "rosca_biceps": "Rosca Bíceps",
+    "rosca_biceps": "Rosca Biceps",
     "descanso":     "Descanso",
 }
 EX_ICONS: dict = {
@@ -70,7 +70,7 @@ if "preview_video_path" not in st.session_state:
 
 st.set_page_config(page_title="Prediction App - Random Forest", layout="wide")
 st.title("🏋️ Análise de Exercícios com IA")
-st.caption("Upload seu vídeo e classifique os exercícios em tempo real!")
+st.caption("Upload seu vídeo para classificar e realizar a contagem de repetições!")
 
 with st.sidebar:
     st.header("⚙️ Configurações")
@@ -276,7 +276,6 @@ if uploaded_video is not None:
         time_per_exercise = result.get("time_per_exercise", {})
 
         st.divider()
-        st.subheader("📊 Resultados")
 
         elapsed = st.session_state.get("processing_elapsed")
         if elapsed is not None:
