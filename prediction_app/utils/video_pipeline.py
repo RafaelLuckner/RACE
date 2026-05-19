@@ -405,9 +405,9 @@ class RandomForestVideoPredictor:
 
     # Exercise display config: (label, BGR color)
     _EX_DISPLAY = {
-        "flexao":       ("Flexão",      (  0, 230,  80)),
+        "flexao":       ("Flexao",      (  0, 230,  80)),
         "agachamento":  ("Agachamento", ( 60, 180, 255)),
-        "rosca_biceps": ("Rosca Bíceps", (0, 200, 255)),
+        "rosca_biceps": ("Rosca Biceps", (0, 200, 255)),
     }
 
     def _draw_rep_count_overlay(
