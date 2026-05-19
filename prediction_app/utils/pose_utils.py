@@ -413,17 +413,10 @@ def draw_angles_on_frame(
             )
             
             angles_drawn.append(f"{angle_name}: {angle_int}")
-        except Exception as e:
-            # Ignorar erros ao calcular ângulo
-            angles_skipped[angle_name] = str(e)
+        except Exception:
+            angles_skipped[angle_name] = True
             continue
-    
-    # Debug: printar quais ângulos foram desenhados
-    if angles_drawn:
-        print(f"✓ Ângulos desenhados: {', '.join(angles_drawn)}")
-    if angles_skipped:
-        print(f"✗ Ângulos pulados: {angles_skipped}")
-    
+
     # Aplicar mapeamento de arestas para ângulos
     # Para cada aresta, verificar qual ângulo deve colorir e usar sua cor
     for edge, angle_name in edge_to_angle_mapping.items():

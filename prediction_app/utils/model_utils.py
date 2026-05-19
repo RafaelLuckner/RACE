@@ -6,7 +6,7 @@ import pickle
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from .constants import ANGLE_COLUMNS, ML_MODELS_DIR
+from .constants import ANGLE_COLUMNS, VISIBILITY_COLUMNS, ML_MODELS_DIR
 
 
 def _load_pickle(path: Path):
@@ -63,57 +63,69 @@ def load_model_artifacts(models_dir: Path | None = None):
     return model, scaler, name_to_id, id_to_name, paths
 
 
-def infer_window_size_from_scaler(scaler, angle_columns: List[str] | None = None) -> int:
-    columns = angle_columns or ANGLE_COLUMNS
+def infer_window_size_from_scaler(scaler, feature_columns_spec: List[str] | None = None) -> int:
+    if feature_columns_spec is None:
+        feature_columns_spec = list(ANGLE_COLUMNS)
+    
     n_features = getattr(scaler, "n_features_in_", None)
     if n_features is None:
         raise ValueError("Scaler does not expose n_features_in_ for window size inference")
 
-    if len(columns) == 0:
-        raise ValueError("angle_columns must not be empty")
+    if len(feature_columns_spec) == 0:
+        raise ValueError("feature_columns_spec must not be empty")
 
-    if n_features % len(columns) != 0:
+    if n_features % len(feature_columns_spec) != 0:
         raise ValueError(
             f"Feature count mismatch: scaler expects {n_features} features, "
-            f"but {len(columns)} angle columns do not divide this value"
+            f"but {len(feature_columns_spec)} features per frame do not divide this value"
         )
 
-    window_size = n_features // len(columns)
+    window_size = n_features // len(feature_columns_spec)
     if window_size <= 0:
         raise ValueError("Invalid inferred window size")
 
     return int(window_size)
 
 
-def build_feature_columns(window_size: int, angle_columns: List[str] | None = None) -> List[str]:
+def build_feature_columns(window_size: int, feature_columns_spec: List[str] | None = None) -> List[str]:
     """
     Builds feature column names in the exact order used during training.
     
-    IMPORTANT: The order of angle_columns MUST match training (2-random_forest_training.ipynb):
-    right_cotovelo, left_cotovelo, right_ombro, left_ombro, right_joelho, left_joelho, right_quadril, left_quadril
+    IMPORTANT: The order MUST match training (2-random_forest_training.ipynb):
+    15 frames × 8 angles = 120 features (visibility columns are NOT included)
+    
+    Args:
+        window_size: Number of frames (e.g., 15)
+        feature_columns_spec: List of feature column names (angles + visibilities)
+                            If None, uses ANGLE_COLUMNS + VISIBILITY_COLUMNS
     """
-    columns = angle_columns or ANGLE_COLUMNS
+    if feature_columns_spec is None:
+        feature_columns_spec = list(ANGLE_COLUMNS)
+    
     feature_columns = []
     for frame_idx in range(1, window_size + 1):
-        for angle_col in columns:
-            feature_columns.append(f"frame_{frame_idx}_{angle_col}")
+        for col_name in feature_columns_spec:
+            feature_columns.append(f"frame_{frame_idx}_{col_name}")
+    
     return feature_columns
 
 
-def validate_feature_columns(X: 'pd.DataFrame', expected_window_size: int, angle_columns: List[str] | None = None) -> Tuple[bool, str]:
+def validate_feature_columns(X: 'pd.DataFrame', expected_window_size: int, feature_columns_spec: List[str] | None = None) -> Tuple[bool, str]:
     """
     Validates that feature columns match expected training format.
     
     Args:
         X: Feature DataFrame
         expected_window_size: Window size used during training (should be 15)
-        angle_columns: Angle columns used (should match ANGLE_COLUMNS)
+        feature_columns_spec: Feature column names (angles + visibilities)
     
     Returns:
         Tuple of (is_valid, error_message)
     """
-    columns = angle_columns or ANGLE_COLUMNS
-    expected_columns = build_feature_columns(expected_window_size, columns)
+    if feature_columns_spec is None:
+        feature_columns_spec = list(ANGLE_COLUMNS) + list(VISIBILITY_COLUMNS)
+    
+    expected_columns = build_feature_columns(expected_window_size, feature_columns_spec)
     
     if X.empty:
         return True, ""  # Empty dataframe is OK

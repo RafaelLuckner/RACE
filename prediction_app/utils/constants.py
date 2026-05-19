@@ -1,4 +1,15 @@
-"""Constants used by the Random Forest video prediction pipeline."""
+"""Constants used by the Random Forest video prediction pipeline.
+
+CRITICAL: The order of ANGLE_COLUMNS MUST match EXACTLY the order used in training
+(2-random_forest_training.ipynb, variable `angle_columns` in cell 9).
+
+Training order:
+  angle_columns = ['right_cotovelo', 'left_cotovelo', 'right_ombro', 'left_ombro',
+                   'right_joelho', 'left_joelho', 'right_quadril', 'left_quadril']
+
+The StandardScaler is positional: it applies mean/std by column index, not by name.
+Wrong order = wrong normalization = garbage predictions.
+"""
 
 from pathlib import Path
 
@@ -12,9 +23,11 @@ DEFAULT_MIN_POSE_DETECTION_CONFIDENCE = 0.2
 DEFAULT_MIN_POSE_PRESENCE_CONFIDENCE = 0.2
 DEFAULT_POSE_MODEL_VARIANT = "full"
 
-# IMPORTANT: This order MUST match the training notebook (2-random_forest_training.ipynb line 260)
-# Training used: window_size=15, angle_columns in this exact order
+# IMPORTANT: This order MUST match the training notebook (2-random_forest_training.ipynb)
+# Training used: window_size=15, angle_columns only (no visibility)
 # Total features: 15 frames × 8 angles = 120 features
+# Order from training: right_cotovelo, left_cotovelo, right_ombro, left_ombro,
+#                      right_joelho, left_joelho, right_quadril, left_quadril
 TRAINING_WINDOW_SIZE = 15
 ANGLE_COLUMNS = [
     "right_cotovelo",
@@ -25,6 +38,18 @@ ANGLE_COLUMNS = [
     "left_joelho",
     "right_quadril",
     "left_quadril",
+]
+
+# Visibility weight columns (same order as ANGLE_COLUMNS)
+VISIBILITY_COLUMNS = [
+    "right_cotovelo_visibility_weight",
+    "left_cotovelo_visibility_weight",
+    "right_ombro_visibility_weight",
+    "left_ombro_visibility_weight",
+    "right_joelho_visibility_weight",
+    "left_joelho_visibility_weight",
+    "right_quadril_visibility_weight",
+    "left_quadril_visibility_weight",
 ]
 
 LANDMARK_INDEX = {
@@ -43,20 +68,21 @@ LANDMARK_INDEX = {
     "right_ankle": 28,
 }
 
-# Angle definitions (corrected anatomical order: p1 → vertex → p2)
+# Angle definitions (anatomical order: p1 → vertex → p2)
+# CRITICAL: Dict order matches ANGLE_COLUMNS above (same as training)
 # Cotovelo: flexão/extensão (shoulder → elbow → wrist)
 # Ombro: abução/adução (elbow → shoulder → hip)
 # Joelho: flexão/extensão (hip → knee → ankle)
 # Quadril: flexão/extensão (knee → hip → shoulder)
 ANGLE_DEFINITIONS = {
     "right_cotovelo": ("right_shoulder", "right_elbow", "right_wrist"),
-    "left_cotovelo": ("left_shoulder", "left_elbow", "left_wrist"),
-    "right_ombro": ("right_elbow", "right_shoulder", "right_hip"),
-    "left_ombro": ("left_elbow", "left_shoulder", "left_hip"),
-    "right_joelho": ("right_hip", "right_knee", "right_ankle"),
-    "left_joelho": ("left_hip", "left_knee", "left_ankle"),
-    "right_quadril": ("right_knee", "right_hip", "right_shoulder"),
-    "left_quadril": ("left_knee", "left_hip", "left_shoulder"),
+    "left_cotovelo":  ("left_shoulder",  "left_elbow",  "left_wrist"),
+    "right_ombro":    ("right_elbow",    "right_shoulder", "right_hip"),
+    "left_ombro":     ("left_elbow",     "left_shoulder",  "left_hip"),
+    "right_joelho":   ("right_hip",      "right_knee",   "right_ankle"),
+    "left_joelho":    ("left_hip",       "left_knee",    "left_ankle"),
+    "right_quadril":  ("right_knee",     "right_hip",    "right_shoulder"),
+    "left_quadril":   ("left_knee",      "left_hip",     "left_shoulder"),
 }
 
 LANDMARK_CONNECTIONS = [

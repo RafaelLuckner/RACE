@@ -7,25 +7,28 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 
-from .constants import ANGLE_COLUMNS
+from .constants import ANGLE_COLUMNS, VISIBILITY_COLUMNS
 from .model_utils import build_feature_columns
 
 
-def build_frames_dataframe(frame_records: List[Dict], angle_columns: List[str] | None = None) -> pd.DataFrame:
-    columns = angle_columns or ANGLE_COLUMNS
+def build_frames_dataframe(frame_records: List[Dict], angle_columns: List[str] | None = None, visibility_columns: List[str] | None = None) -> pd.DataFrame:
+    angle_cols = angle_columns or ANGLE_COLUMNS
+    vis_cols = visibility_columns or VISIBILITY_COLUMNS
+    all_feature_cols = list(angle_cols) + list(vis_cols)
+    
     df = pd.DataFrame(frame_records)
 
     if df.empty:
-        return pd.DataFrame(columns=["frame", "timestamp_s", "has_landmarks", *columns])
+        return pd.DataFrame(columns=["frame", "timestamp_s", "has_landmarks", *all_feature_cols])
 
-    for col in columns:
+    for col in all_feature_cols:
         if col not in df.columns:
             df[col] = np.nan
 
     if "has_landmarks" not in df.columns:
         df["has_landmarks"] = False
 
-    keep_columns = ["frame", "timestamp_s", "has_landmarks", *columns, "landmarks", "visibility", "presence"]
+    keep_columns = ["frame", "timestamp_s", "has_landmarks", *all_feature_cols, "landmarks", "visibility", "presence"]
     for col in keep_columns:
         if col not in df.columns:
             df[col] = None
@@ -45,16 +48,22 @@ def create_temporal_features_window(
     df: pd.DataFrame,
     window_size: int,
     angle_columns: List[str] | None = None,
+    visibility_columns: List[str] | None = None,
     min_landmark_frames_in_window: int = 1,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Creates one row per temporal window using direct frame angle values.
+    Creates one row per temporal window using only angle values, matching the training notebook.
 
     Each output feature column follows the notebook format:
-    frame_1_right_cotovelo, ..., frame_N_left_quadril.
+    frame_1_right_cotovelo, frame_1_right_ombro, ..., frame_N_left_quadril.
+    
+    Total features: window_size × n_angles
+    Example: 15 frames × 8 angles = 120 features
     """
-    columns = angle_columns or ANGLE_COLUMNS
-    feature_columns = build_feature_columns(window_size, columns)
+    angle_cols = angle_columns or ANGLE_COLUMNS
+    vis_cols = visibility_columns or VISIBILITY_COLUMNS
+    
+    feature_columns = build_feature_columns(window_size, list(angle_cols))
 
     features_list: List[Dict[str, float]] = []
     metadata_list: List[Dict[str, float]] = []
@@ -76,7 +85,9 @@ def create_temporal_features_window(
         row = {}
         for frame_offset in range(window_size):
             frame_data = window.iloc[frame_offset]
-            for angle_col in columns:
+            
+            # Adicionar apenas ângulos (matching training: 15 × 8 = 120 features)
+            for angle_col in angle_cols:
                 row[f"frame_{frame_offset + 1}_{angle_col}"] = frame_data.get(angle_col, np.nan)
 
         features_list.append(row)

@@ -30,7 +30,10 @@ def calculate_angle(p1, vertex, p2):
 def extract_angles_from_landmarks(df):
     """
     Extrai ângulos articulares dos dados de landmarks.
-    IMPORTANTE: Processa cada exercício SEPARADAMENTE para evitar perda de dados.
+    Processa cada (video_source, exercise) separadamente para evitar colisão
+    de frame IDs entre vídeos diferentes do mesmo exercício.
+    Se 'video_source' não estiver presente no df, agrupa apenas por 'exercise'
+    (compatibilidade retroativa com outros notebooks).
     Inclui pesos de visibilidade para cada ângulo calculado.
     """
     landmarks = {
@@ -49,13 +52,21 @@ def extract_angles_from_landmarks(df):
     }
 
     frames_data = []
-    
-    # ⭐ IMPORTANTE: Processar cada exercício separadamente
-    for exercise in df['exercise'].unique():
-        exercise_df = df[df['exercise'] == exercise]
-        
-        for frame_id in exercise_df['frame'].unique():
-            frame_df = exercise_df[exercise_df['frame'] == frame_id]
+
+    # ⭐ Agrupar por (video_source, exercise) para evitar colisão de frame IDs
+    # entre vídeos diferentes do mesmo exercício.
+    has_video_source = 'video_source' in df.columns
+    group_cols = ['video_source', 'exercise'] if has_video_source else ['exercise']
+
+    for keys, group_df in df.groupby(group_cols, sort=False):
+        if has_video_source:
+            video_source, exercise = keys
+        else:
+            video_source = None
+            exercise = keys
+
+        for frame_id in group_df['frame'].unique():
+            frame_df = group_df[group_df['frame'] == frame_id]
 
             landmarks_coords = {}
             landmarks_visibility = {}
@@ -73,8 +84,10 @@ def extract_angles_from_landmarks(df):
             angles = {
                 'frame': frame_id,
                 'timestamp_s': frame_df.iloc[0]['timestamp_s'],
-                'exercise': frame_df.iloc[0]['exercise'],
+                'exercise': exercise,
             }
+            if has_video_source:
+                angles['video_source'] = video_source
 
             # Cotovelo Direito: flexão/extensão (ombro → cotovelo → pulso)
             if all(k in landmarks_coords for k in ['right_shoulder', 'right_elbow', 'right_wrist']):

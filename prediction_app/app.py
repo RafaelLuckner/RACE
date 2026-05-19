@@ -10,6 +10,7 @@ import streamlit as st
 
 from utils.constants import (
     ANGLE_COLUMNS,
+    VISIBILITY_COLUMNS,
     TRAINING_WINDOW_SIZE,
     DEFAULT_MIN_POSE_DETECTION_CONFIDENCE,
     DEFAULT_OUTPUT_DIR,
@@ -23,6 +24,21 @@ from utils.model_utils import (
 from utils.pose_utils import PoseLandmarkerDetector
 from utils.video_pipeline import RandomForestVideoPredictor
 from utils.video_validation import get_compatible_preview_video, validate_video
+
+
+@st.cache_resource(show_spinner="⏳ Carregando modelo RF...")
+def _load_model_cached():
+    return load_model_artifacts(ML_MODELS_DIR)
+
+
+def _create_pose_detector(model_variant: str, min_confidence: float):
+    """Cria um novo detector de pose por chamada — VIDEO mode é stateful e não pode ser reutilizado entre vídeos."""
+    return PoseLandmarkerDetector(
+        model_variant=model_variant,
+        min_confidence=min_confidence,
+        video_mode=True,
+        num_poses=1,
+    )
 
 
 # Inicializar session state
@@ -138,18 +154,17 @@ if uploaded_video is not None:
         status_placeholder = st.empty()
         
         try:
-            # Carregar modelos
+            # Carregar modelos (cacheados — só carregam uma vez por sessão)
             with status_placeholder.container():
                 st.info("⏳ Carregando modelos...")
             
-            model, scaler, class_name_to_id, class_id_to_name, _ = load_model_artifacts(ML_MODELS_DIR)
+            model, scaler, class_name_to_id, class_id_to_name, _ = _load_model_cached()
             
-            # Use TRAINING_WINDOW_SIZE (15) to match notebook training
-            # Validate that scaler was fitted with correct feature count
+            # Validate scaler expects 120 features (15 frames × 8 angles)
             expected_feature_count = TRAINING_WINDOW_SIZE * len(ANGLE_COLUMNS)
             actual_feature_count = getattr(scaler, 'n_features_in_', None)
-            if actual_feature_count != expected_feature_count:
-                st.error(f"❌ Erro: Scaler espera {actual_feature_count} features, mas esperamos {expected_feature_count} (window_size={TRAINING_WINDOW_SIZE} × angles={len(ANGLE_COLUMNS)})")
+            if actual_feature_count is not None and actual_feature_count != expected_feature_count:
+                st.error(f"❌ Erro: Scaler espera {actual_feature_count} features, mas calculamos {expected_feature_count} (window_size={TRAINING_WINDOW_SIZE} × {len(ANGLE_COLUMNS)} ângulos)")
                 st.stop()
             
             window_size = TRAINING_WINDOW_SIZE
@@ -166,13 +181,8 @@ if uploaded_video is not None:
                 st.error(f"❌ Vídeo inválido: {validation_msg}")
                 st.stop()
 
-            # Processar vídeo
-            pose_detector = PoseLandmarkerDetector(
-                model_variant=DEFAULT_POSE_MODEL_VARIANT,
-                min_confidence=min_pose_confidence,
-                video_mode=True,
-                num_poses=1,
-            )
+            # Processar vídeo — detector criado por chamada (VIDEO mode é stateful)
+            pose_detector = _create_pose_detector(DEFAULT_POSE_MODEL_VARIANT, min_pose_confidence)
 
             # Callback para progresso
             def progress_callback(current_frame, total_frames, stage):
@@ -189,6 +199,7 @@ if uploaded_video is not None:
                 window_size=window_size,
                 process_fps=DEFAULT_PROCESS_FPS,
                 angle_columns=ANGLE_COLUMNS,
+                visibility_columns=VISIBILITY_COLUMNS,
                 min_pose_detection_confidence=min_pose_confidence,
                 min_pose_presence_confidence=min_pose_confidence,
                 max_seconds=max_seconds,
@@ -206,6 +217,7 @@ if uploaded_video is not None:
             status_placeholder.empty()
             
             st.success("✅ Processamento concluído!")
+
             st.rerun()
 
         except Exception as exc:
@@ -234,10 +246,11 @@ if uploaded_video is not None:
     if st.session_state.processing_result is not None:
         result = st.session_state.processing_result
         summary = result["summary"]
-        
+        rep_counts = result.get("rep_counts", {})
+
         st.divider()
         st.subheader("📊 Resultados")
-        
+
         col1, col2 = st.columns(2)
         with col1:
             st.metric("🎯 Exercício final", summary.get("final_prediction") or "N/A")

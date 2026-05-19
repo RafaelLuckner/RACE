@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.signal import find_peaks
 import numpy as np
+from matplotlib.patches import Patch
 
 def media_movel(df, janela):
     colunas_angulos = [
@@ -23,7 +24,8 @@ def media_movel(df, janela):
 
 
 def plotar_grafico_angulos(df_angulos, titulo,
-                          articulacoes=('joelho', 'quadril', 'ombro', 'cotovelo'), fonte=12):
+                          articulacoes=('joelho', 'quadril', 'ombro', 'cotovelo'), fonte=12,
+                          save_path=None):
 
     sns.set_theme(style="whitegrid", context="paper")
 
@@ -105,6 +107,8 @@ def plotar_grafico_angulos(df_angulos, titulo,
     fig.suptitle(titulo, fontsize=fonte * 1.3, fontweight='bold')
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
+    if save_path:
+        plt.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.show()
 
 
@@ -328,4 +332,3 @@ def detectar_repeticoes_exercicio(df_angles, articulacoes='cotovelo',
     
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     plt.show()
-    
