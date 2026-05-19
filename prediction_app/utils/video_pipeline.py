@@ -405,9 +405,9 @@ class RandomForestVideoPredictor:
 
     # Exercise display config: (label, BGR color)
     _EX_DISPLAY = {
-        "flexao":       ("Flexao",      (  0, 230,  80)),
+        "flexao":       ("Flexão",      (  0, 230,  80)),
         "agachamento":  ("Agachamento", ( 60, 180, 255)),
-        "rosca_biceps": ("Rosca Biceps", (0, 200, 255)),
+        "rosca_biceps": ("Rosca Bíceps", (0, 200, 255)),
     }
 
     def _draw_rep_count_overlay(
@@ -574,7 +574,10 @@ class RandomForestVideoPredictor:
         # Contar total de frames para progresso
         max_frame_limit = None
         if self.max_seconds is not None:
-            max_frame_limit = int(self.max_seconds * float(video_info["fps"]))
+            max_frame_limit = min(
+                int(self.max_seconds * float(video_info["fps"])),
+                int(video_info["total_frames"]),
+            )
 
         frame_idx = 0
         rendered_count = 0

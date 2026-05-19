@@ -239,6 +239,7 @@ if uploaded_video is not None:
             progress_placeholder.empty()
             status_placeholder.empty()
             timer_placeholder.empty()
+            st.session_state.processing_elapsed = _elapsed
             
             st.success(f"✅ Processamento concluído em {_elapsed:.1f}s!")
 
@@ -276,6 +277,13 @@ if uploaded_video is not None:
 
         st.divider()
         st.subheader("📊 Resultados")
+
+        elapsed = st.session_state.get("processing_elapsed")
+        if elapsed is not None:
+            mins = int(elapsed // 60)
+            secs = elapsed % 60
+            tempo_proc = f"{mins}m {secs:.1f}s" if mins > 0 else f"{secs:.1f}s"
+            st.caption(f"⏱️ Tempo de processamento: **{tempo_proc}**")
 
         # Tabela de exercícios: contagem de repetições e tempo
         exercises = [ex for ex in ["agachamento", "flexao", "rosca_biceps", "descanso"]
