@@ -19,8 +19,6 @@ from utils.constants import (
     ML_MODELS_DIR,
 )
 from utils.model_utils import load_model_artifacts
-from utils.pose_utils import PoseLandmarkerDetector
-from utils.video_pipeline import RandomForestVideoPredictor
 from utils.video_validation import get_compatible_preview_video, validate_video
 
 CLASS_LABELS: dict = {
@@ -52,6 +50,10 @@ def _load_model_cached():
 
 
 def _create_pose_detector(model_variant: str, min_confidence: float):
+    # Sem cache: o detector VIDEO mode do MediaPipe mantém estado de timestamp
+    # internamente e não pode ser reutilizado entre vídeos diferentes.
+    # O import pesado (mediapipe/tensorflow) só ocorre uma vez — Python cacheia em sys.modules.
+    from utils.pose_utils import PoseLandmarkerDetector  # lazy — evita import de mediapipe/tf no load da página
     return PoseLandmarkerDetector(
         model_variant=model_variant,
         min_confidence=min_confidence,
@@ -159,13 +161,7 @@ if uploaded_video is not None:
     col1, col2 = st.columns(2)
     with col1:
         process_button = st.button("▶️ Processar vídeo", type="primary", key="process_btn")
-    with col2:
-        if st.session_state.processing_result is not None:
-            st.button(
-                "🗑️ Limpar resultado",
-                key="clear_btn",
-                on_click=lambda: st.session_state.update({"processing_result": None}),
-            )
+
 
     if process_button:
         progress_placeholder = st.empty()
@@ -177,6 +173,7 @@ if uploaded_video is not None:
             with status_placeholder.container():
                 st.info("⏳ Carregando modelos...")
 
+            from utils.video_pipeline import RandomForestVideoPredictor  # lazy — mediapipe/tf só aqui
             model, scaler, class_name_to_id, class_id_to_name, _ = _load_model_cached()
 
             expected_feature_count = TRAINING_WINDOW_SIZE * len(ANGLE_COLUMNS)

@@ -53,7 +53,7 @@ with col_tech:
     st.markdown(
         "**1. Detecção de pose — MediaPipe Pose (Full)**\n"
         "- 33 landmarks corporais por frame\n"
-        "- Coordenadas 3D (x, y, z) + visibilidade\n\n"
+        "- Coordenadas 2D (x, y) + visibilidade\n\n"
         "**2. Extração de ângulos articulares**\n"
         "- 8 ângulos bilaterais por frame:\n"
         "  cotovelo D/E · ombro D/E · joelho D/E · quadril D/E\n\n"
@@ -69,13 +69,12 @@ with col_tech:
 
 st.divider()
 
-st.subheader("🏅 Exercícios reconhecidos")
+st.subheader("Exercícios reconhecidos")
 ex_cols = st.columns(4)
 ex_details = [
     ("💪", "Flexão de Braço", "Posição prone. Articulações monitoradas: **cotovelo** e **ombro** (bilateral)."),
     ("🏋️", "Agachamento",     "Em pé. Articulações monitoradas: **joelho** e **quadril** (bilateral)."),
     ("🦾", "Rosca Bíceps",    "Em pé. Articulação monitorada: **cotovelo** (bilateral)."),
-    ("😴", "Descanso",        "Ausência de movimento ativo. Usado para separar séries de exercícios."),
 ]
 for col, (icon, name, desc) in zip(ex_cols, ex_details):
     with col:

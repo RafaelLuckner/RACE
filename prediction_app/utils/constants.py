@@ -13,10 +13,18 @@ Wrong order = wrong normalization = garbage predictions.
 
 from pathlib import Path
 
+import os as _os
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ML_MODELS_DIR = PROJECT_ROOT / "ml_models"
 POSE_MODELS_DIR = PROJECT_ROOT / "models"
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "videos_output" / "prediction_app"
+# On Hugging Face Spaces the repo dir is read-only; use /tmp instead.
+_running_on_hf = bool(_os.environ.get("SPACE_ID"))
+DEFAULT_OUTPUT_DIR = (
+    Path("/tmp/race_outputs")
+    if _running_on_hf
+    else PROJECT_ROOT / "videos_output" / "prediction_app"
+)
 
 DEFAULT_PROCESS_FPS = 5
 DEFAULT_MIN_POSE_DETECTION_CONFIDENCE = 0.2
