@@ -63,6 +63,31 @@ def load_model_artifacts(models_dir: Path | None = None):
     return model, scaler, name_to_id, id_to_name, paths
 
 
+def load_lstm_model_artifacts(models_dir: Path | None = None):
+    """Loads the saved Keras LSTM model and its preprocessing artifacts."""
+    base_dir = models_dir or ML_MODELS_DIR
+    paths = {
+        "model": base_dir / "lstm_4exercises_model.keras",
+        "scaler": base_dir / "lstm_4exercises_scaler.pkl",
+        "label_map": base_dir / "lstm_4exercises_label_map.pkl",
+    }
+
+    missing = [str(path) for path in paths.values() if not path.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "Missing required LSTM artifacts: " + ", ".join(missing)
+        )
+
+    # TensorFlow is optional for the Random Forest flow, so load it only here.
+    from tensorflow import keras
+
+    model = keras.models.load_model(paths["model"])
+    scaler = _load_pickle(paths["scaler"])
+    raw_label_map = _load_pickle(paths["label_map"])
+    name_to_id, id_to_name = normalize_label_map(raw_label_map)
+    return model, scaler, name_to_id, id_to_name, paths
+
+
 def infer_window_size_from_scaler(scaler, feature_columns_spec: List[str] | None = None) -> int:
     if feature_columns_spec is None:
         feature_columns_spec = list(ANGLE_COLUMNS)

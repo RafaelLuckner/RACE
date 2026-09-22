@@ -23,7 +23,11 @@ from .constants import (
     DEFAULT_MIN_POSE_PRESENCE_CONFIDENCE,
     DEFAULT_OUTPUT_DIR,
 )
-from .feature_utils import build_frames_dataframe, create_temporal_features_window
+from .feature_utils import (
+    build_frames_dataframe,
+    create_lstm_temporal_sequences,
+    create_temporal_features_window,
+)
 from .model_utils import build_feature_columns
 from .pose_utils import (
     PoseLandmarkerDetector,
@@ -795,3 +799,61 @@ class RandomForestVideoPredictor:
             "time_per_exercise": time_per_exercise,
             "video_info": video_info,
         }
+
+
+class LSTMVideoPredictor(RandomForestVideoPredictor):
+    """Video predictor that builds the temporal 15 x 22 LSTM input tensor."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        input_shape = tuple(self.model.input_shape)
+        if len(input_shape) != 3 or input_shape[1] != self.window_size or input_shape[2] != 22:
+            raise ValueError(
+                "LSTM model expects an incompatible input shape: "
+                f"{input_shape}. Expected (None, {self.window_size}, 22)."
+            )
+
+        scaler_features = getattr(self.scaler, "n_features_in_", None)
+        if scaler_features is not None and scaler_features != 22:
+            raise ValueError(
+                f"LSTM scaler expects {scaler_features} features per frame; expected 22."
+            )
+
+    def _predict_windows(
+        self,
+        frame_df: pd.DataFrame,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        X, metadata = create_lstm_temporal_sequences(
+            frame_df,
+            window_size=self.window_size,
+            angle_columns=self.angle_columns,
+            min_landmark_frames_in_window=1,
+        )
+        if not len(X) or metadata.empty:
+            raise ValueError(
+                "No valid temporal windows were created. "
+                "Check landmark detection quality or use a longer video."
+            )
+
+        n_windows, sequence_length, n_features = X.shape
+        X_scaled = self.scaler.transform(X.reshape(-1, n_features)).reshape(
+            n_windows, sequence_length, n_features
+        )
+        probabilities = self.model.predict(X_scaled, verbose=0)
+        max_indices = np.argmax(probabilities, axis=1)
+        pred_ids = [int(self.model_classes[index]) for index in max_indices]
+
+        predictions_df = metadata.copy()
+        predictions_df["pred_label_id"] = pred_ids
+        predictions_df["pred_label_name"] = [
+            self.class_id_to_name.get(prediction_id, str(prediction_id))
+            for prediction_id in pred_ids
+        ]
+        predictions_df["confidence"] = probabilities.max(axis=1)
+
+        for class_index, class_id in enumerate(self.model_classes):
+            class_name = self.class_id_to_name.get(class_id, str(class_id))
+            predictions_df[_safe_probability_column(class_name)] = probabilities[:, class_index]
+
+        return predictions_df.copy(), predictions_df

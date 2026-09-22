@@ -18,7 +18,7 @@ from utils.constants import (
     DEFAULT_PROCESS_FPS,
     ML_MODELS_DIR,
 )
-from utils.model_utils import load_model_artifacts
+from utils.model_utils import load_lstm_model_artifacts, load_model_artifacts
 from utils.video_validation import get_compatible_preview_video, validate_video
 
 CLASS_LABELS: dict = {
@@ -45,8 +45,13 @@ def _label(class_name: str) -> str:
 
 
 @st.cache_resource(show_spinner="⏳ Carregando modelo RF...")
-def _load_model_cached():
+def _load_random_forest_model_cached():
     return load_model_artifacts(ML_MODELS_DIR)
+
+
+@st.cache_resource(show_spinner="⏳ Carregando modelo LSTM...")
+def _load_lstm_model_cached():
+    return load_lstm_model_artifacts(ML_MODELS_DIR)
 
 
 def _create_pose_detector(model_variant: str, min_confidence: float):
@@ -80,6 +85,12 @@ with st.sidebar:
 
     st.divider()
     st.markdown("#### ⚙️ Configurações de processamento")
+
+    selected_model = st.selectbox(
+        "Modelo de classificação",
+        options=("Random Forest", "LSTM"),
+        help="Escolha o modelo usado para classificar as janelas temporais do vídeo.",
+    )
 
     min_pose_confidence = st.slider(
         "Confiança na detecção",
@@ -115,6 +126,10 @@ with st.sidebar:
 
     if not visualization_options:
         visualization_options = ["classification", "angles", "landmarks"]
+
+if st.session_state.get("selected_model") != selected_model:
+    st.session_state.processing_result = None
+    st.session_state.selected_model = selected_model
 
 # ── CONTEÚDO PRINCIPAL ────────────────────────────────────────────────────────
 st.title("🎯 Predição de Exercícios")
@@ -173,16 +188,26 @@ if uploaded_video is not None:
             with status_placeholder.container():
                 st.info("⏳ Carregando modelos...")
 
-            from utils.video_pipeline import RandomForestVideoPredictor  # lazy — mediapipe/tf só aqui
-            model, scaler, class_name_to_id, class_id_to_name, _ = _load_model_cached()
+            from utils.video_pipeline import LSTMVideoPredictor, RandomForestVideoPredictor
 
-            expected_feature_count = TRAINING_WINDOW_SIZE * len(ANGLE_COLUMNS)
+            if selected_model == "LSTM":
+                model, scaler, class_name_to_id, class_id_to_name, _ = _load_lstm_model_cached()
+                predictor_class = LSTMVideoPredictor
+                expected_feature_count = 22
+                feature_description = "22 atributos por frame"
+            else:
+                model, scaler, class_name_to_id, class_id_to_name, _ = _load_random_forest_model_cached()
+                predictor_class = RandomForestVideoPredictor
+                expected_feature_count = TRAINING_WINDOW_SIZE * len(ANGLE_COLUMNS)
+                feature_description = (
+                    f"{TRAINING_WINDOW_SIZE} frames × {len(ANGLE_COLUMNS)} ângulos"
+                )
+
             actual_feature_count = getattr(scaler, "n_features_in_", None)
             if actual_feature_count is not None and actual_feature_count != expected_feature_count:
                 st.error(
-                    f"❌ Scaler espera {actual_feature_count} features, "
-                    f"calculamos {expected_feature_count} "
-                    f"(window={TRAINING_WINDOW_SIZE} × {len(ANGLE_COLUMNS)} ângulos)"
+                    f"❌ Scaler do {selected_model} espera {actual_feature_count} features; "
+                    f"o pipeline fornece {feature_description}."
                 )
                 st.stop()
 
@@ -206,7 +231,7 @@ if uploaded_video is not None:
                 timer_placeholder.caption(f"⏱️ Tempo decorrido: {elapsed:.1f}s")
                 status_placeholder.info(f"🔄 {stage}: Frame {current_frame}/{total_frames}")
 
-            predictor = RandomForestVideoPredictor(
+            predictor = predictor_class(
                 model=model,
                 scaler=scaler,
                 class_name_to_id=class_name_to_id,

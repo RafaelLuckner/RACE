@@ -109,3 +109,67 @@ def create_temporal_features_window(
         X = _fill_missing_values_rowwise(X)
 
     return X, metadata
+
+
+def create_lstm_temporal_sequences(
+    df: pd.DataFrame,
+    window_size: int,
+    angle_columns: List[str] | None = None,
+    min_landmark_frames_in_window: int = 1,
+) -> Tuple[np.ndarray, pd.DataFrame]:
+    """Creates the 22-feature sequence representation used by the LSTM model."""
+    angle_cols = angle_columns or ANGLE_COLUMNS
+    joint_pairs = [
+        ("right_cotovelo", "left_cotovelo"),
+        ("right_ombro", "left_ombro"),
+        ("right_joelho", "left_joelho"),
+        ("right_quadril", "left_quadril"),
+    ]
+    right_indices = [angle_cols.index(right) for right, _ in joint_pairs]
+    left_indices = [angle_cols.index(left) for _, left in joint_pairs]
+
+    if df.empty or len(df) < window_size:
+        return np.empty((0, window_size, 22), dtype=np.float32), pd.DataFrame()
+
+    video_start = float(df["timestamp_s"].min())
+    video_duration = max(float(df["timestamp_s"].max()) - video_start, 1e-6)
+    sequences: List[np.ndarray] = []
+    metadata_list: List[Dict[str, float]] = []
+
+    for index in range(len(df) - window_size + 1):
+        window = df.iloc[index : index + window_size]
+        frame_diffs = window["frame"].diff().iloc[1:].to_numpy(dtype=float)
+        if frame_diffs.size and not np.all(frame_diffs > 0):
+            continue
+
+        landmark_count = int(window["has_landmarks"].sum())
+        if landmark_count < min_landmark_frames_in_window:
+            continue
+
+        angles_df = _fill_missing_values_rowwise(window[angle_cols])
+        angles = angles_df.to_numpy(dtype=np.float32)
+        velocity = np.zeros_like(angles)
+        velocity[1:] = angles[1:] - angles[:-1]
+        asymmetry = angles[:, right_indices] - angles[:, left_indices]
+        time_seconds = window["timestamp_s"].to_numpy(dtype=np.float32)
+        frame_normalized = ((time_seconds - video_start) / video_duration).reshape(-1, 1)
+        time_features = np.column_stack((frame_normalized, time_seconds.reshape(-1, 1)))
+
+        sequences.append(
+            np.concatenate([angles, velocity, asymmetry, time_features], axis=1)
+        )
+        metadata_list.append(
+            {
+                "window_index": len(metadata_list),
+                "start_frame": int(window.iloc[0]["frame"]),
+                "end_frame": int(window.iloc[-1]["frame"]),
+                "start_timestamp_s": float(window.iloc[0]["timestamp_s"]),
+                "end_timestamp_s": float(window.iloc[-1]["timestamp_s"]),
+                "landmark_frames": landmark_count,
+            }
+        )
+
+    if not sequences:
+        return np.empty((0, window_size, 22), dtype=np.float32), pd.DataFrame()
+
+    return np.asarray(sequences, dtype=np.float32), pd.DataFrame(metadata_list)
