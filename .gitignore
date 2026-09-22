@@ -7,6 +7,7 @@ images/
 videos_input/
 videos_output/
 files_output/
+CONTEXTO_PROJETO.md
 
 3-lstm_training.ipynb
 
